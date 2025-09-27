@@ -31,3 +31,9 @@ Note: This section is for stages 2 and beyond.
    `src/Server.cs`.
 1. Commit your changes and run `git push origin master` to submit your solution
    to CodeCrafters. Test output will be streamed to your terminal.
+
+# Running Code Crafters
+
+`codecrafters test` - will execute the tests which tests for the current stage
+
+`codecrafters submit` - this is executed once we are done
