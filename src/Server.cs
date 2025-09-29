@@ -74,22 +74,109 @@ class CliInput
 
 class Storage
 {
-    readonly Dictionary<string, string> s = [];
+    readonly Dictionary<string, string> S = [];
+    readonly Dictionary<string, DateTime> TTLs = [];
+
+    // Called on every interaction with the Storage to evaluate whether it shoudl evacuate a property.
+    // Running on every call is costly. Might be better to evaluate just the key on call
+    // TODO: run a ticker in 10sec increments async to cleanup.
+    private void EvaluateTTL(string key)
+    {
+        if (TTLs.ContainsKey(key) && TTLs[key] < DateTime.Now)
+        {
+            TTLs.Remove(key);
+            S.Remove(key);
+        }
+    }
 
     public string Get(string key)
     {
-        if (!s.TryGetValue(key, out string? value))
+        this.EvaluateTTL(key);
+        if (!S.TryGetValue(key, out string? value))
         {
             throw new Exception("Value not found");
         }
         return value;
     }
 
-    public void Set(string key, string val)
+    public void Set(string key, string val, SetOptions options)
     {
-        // Currently always overwrites the past input
-        s[key] = val;
+        this.EvaluateTTL(key);
+        if (options == null)
+        {
+            S[key] = val;
+            return;
+        }
+
+        var insertedValue = false;
+        S.TryGetValue(key, out string? value);
+        // Conditionally inserts the value. If not condition is set then inserts
+        if (value != null && options.AddOnlyIfAlreadyDefined)
+        {
+            insertedValue = true;
+            S[key] = val;
+        }
+        else if (value == null && options.AddOnlyIfNotDefined)
+        {
+            insertedValue = true;
+            S[key] = val;
+        }
+        else if (!options.AddOnlyIfAlreadyDefined && !options.AddOnlyIfNotDefined)
+        {
+            insertedValue = true;
+            S[key] = val;
+        }
+        else
+        {
+            throw new Exception("Can't insert value");
+        }
+
+        if (insertedValue && options.TTL != null)
+        {
+            var newTtl = DateTime.Now;
+            switch (options.TTL.Type.ToUpper())
+            {
+                case "EX":
+                    newTtl = DateTime.Now.AddSeconds(options.TTL.Time);
+                    break;
+                case "PX":
+                    newTtl = DateTime.Now.AddMilliseconds(options.TTL.Time);
+                    break;
+                case "EXAT":
+                    newTtl = DateTimeOffset.FromUnixTimeSeconds(options.TTL.Time).DateTime;
+                    break;
+                case "PXAT":
+                    newTtl = DateTimeOffset.FromUnixTimeMilliseconds(options.TTL.Time).DateTime;
+                    break;
+                case "KEEPTTL":
+                    // Since we are keeping last TTL, we don't need to do anything.
+                    break;
+            }
+            TTLs[key] = newTtl;
+
+        }
+        else
+        {
+            TTLs.Remove(key);
+        }
     }
+}
+
+class TTLOptions
+{ 
+    required public int Time;
+
+    // https://redis.io/docs/latest/commands/set/#options
+    // E.g. EX, PX...
+    required public string Type;
+}
+
+class SetOptions
+{
+    public TTLOptions? TTL;
+
+    public bool AddOnlyIfAlreadyDefined;
+    public bool AddOnlyIfNotDefined;
 }
 
 class Interpreter
@@ -99,7 +186,7 @@ class Interpreter
     {
         var command = p.Count > 0 ? p[0] : "ERROR";
         var arguments = p.Count > 1 ? p[1..] : [];
-        return command switch
+        return command.ToUpper() switch
         {
             // TODO: refactor. Instead of returning direct value, after interpretation, this should just return a Command object that we can execute in some way?
             "PING" => Types.GetSimpleString("PONG"),
@@ -116,6 +203,7 @@ class Interpreter
     }
 
 
+    // https://redis.io/docs/latest/commands/set/#options
     public string Set(List<string> arguments)
     {
         if (arguments.Count < 2)
@@ -124,20 +212,86 @@ class Interpreter
         }
         var key = arguments[0];
         var val = arguments[1];
+        string? measurement = null;
+        int time = 0;
+        bool retOldKey = false;
+        string? onlySetIf = null;
+
+        for (var i = 2; i < arguments.Count; i++)
+        {
+            var command = arguments[i];
+            switch (command.ToUpper())
+            {
+                case "NX":
+                case "XX":
+                    onlySetIf = command;
+                    break;
+                case "GET":
+                    retOldKey = true;
+                    break;
+                case "EX":
+                case "PX":
+                case "EXAT":
+                case "PXAT":
+                    if (measurement != null)
+                    {
+                        return Types.GetSimpleString("ERROR ttl already set");
+                    }
+                    measurement = command;
+                    if (arguments.Count < i + 1)
+                    {
+                        return Types.GetSimpleString("ERROR missing time variable");
+                    }
+                    time = int.Parse(arguments[i + 1]);
+                    i++;
+                    break;
+                case "KEEPTTL":
+                    if (measurement != null)
+                    {
+                        return Types.GetSimpleString("ERROR ttl already set");
+                    }
+                    measurement = command;
+                    break;
+                default:
+                    continue;
+            }
+        }
+
         try
         {
-            this.Storage.Set(key, val);
+            var setOptions = new SetOptions
+            {
+                AddOnlyIfAlreadyDefined = onlySetIf != null && onlySetIf == "XX",
+                AddOnlyIfNotDefined = onlySetIf != null && onlySetIf == "NX",
+            };
+            if (measurement != null)
+            {
+                setOptions.TTL = new TTLOptions
+                {
+                    Type = measurement,
+                    Time = time,
+                };
+            }
+
+            var prevVal = this.Get([key]);
+
+            this.Storage.Set(key, val, setOptions);
+            if (retOldKey)
+            {
+                return prevVal;
+            }
             return Types.GetSimpleString("OK");
         }
         catch (Exception)
-        { 
+        {
             return Types.GetSimpleString("ERROR setting val");
         }
     }
 
     public string Get(List<string> arguments)
     {
-        if (arguments.Count < 1) {
+        if (arguments.Count < 1)
+        {
             return Types.GetSimpleString("ERROR missing key");
         }
         try
