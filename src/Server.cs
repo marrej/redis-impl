@@ -74,6 +74,7 @@ class CliInput
 
 class Storage
 {
+    readonly Dictionary<string, List<string>> L = [];
     readonly Dictionary<string, string> S = [];
     readonly Dictionary<string, DateTime> TTLs = [];
 
@@ -160,6 +161,16 @@ class Storage
             TTLs.Remove(key);
         }
     }
+
+    public int Rpush(string list, string input)
+    {
+        if (!L.ContainsKey(list))
+        {
+            L[list] = [];
+        }
+        L[list].Add(input);
+        return L[list].Count;
+    }
 }
 
 class TTLOptions
@@ -193,6 +204,7 @@ class Interpreter
             "ECHO" => this.Echo(arguments),
             "GET" => this.Get(arguments),
             "SET" => this.Set(arguments),
+            "RPUSH" => this.Rpush(arguments),
             _ => Types.GetSimpleString("ERROR no command specified"),
         };
     }
@@ -304,6 +316,22 @@ class Interpreter
             return Types.GetBulkString(null);
         }
     }
+
+    public string Rpush(List<string> arguments)
+    {
+        if (arguments.Count < 2)
+        {
+            return Types.GetSimpleString("ERROR invalida arg count");
+        }
+        var listLength = 0;
+        var list = arguments[0];
+        for (var i = 1; i < arguments.Count; i++)
+        {
+            var item = arguments[i];
+            listLength = this.Storage.Rpush(list, item);
+        }
+        return Types.GetInteger(listLength);
+    }
 }
 
 class Types
@@ -319,8 +347,8 @@ class Types
     {
         var bulkString = "$";
         if (inputs == null)
-        { 
-            return bulkString+(-1).ToString()+"\r\n";
+        {
+            return bulkString + (-1).ToString() + "\r\n";
         }
 
         foreach (var a in inputs)
@@ -330,6 +358,12 @@ class Types
             bulkString = bulkString + len + content;
         }
         return bulkString;
+    }
+
+    // https://redis.io/docs/latest/develop/reference/protocol-spec/#integers
+    public static string GetInteger(int input)
+    {
+        return ":" + input.ToString() + "\r\n";
     }
 }
 
