@@ -182,9 +182,13 @@ class Storage
         }
 
         // - index allows to get to the end of array.
+        if (start < 0)
+        {
+            start = Math.Max(arr.Count + start, 0);
+        }
         if (stop < 0)
         {
-            stop = arr.Count + stop;
+            stop = Math.Max(arr.Count + stop, 0);
         }
 
         // Avoids overruning the array
