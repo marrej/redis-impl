@@ -186,6 +186,12 @@ class Storage
         return L[list].Count;
     }
 
+    public int Llen(string list)
+    {
+        L.TryGetValue(list, out LinkedList<string>? arr);
+        return arr == null ? 0 : arr.Count;
+    }
+
     // Doesn't error out but instead returns empty array
     public List<string> Lrange(string list, int start, int stop)
     {
@@ -267,6 +273,7 @@ class Interpreter
             "RPUSH" => this.Rpush(arguments),
             "LRANGE" => this.Lrange(arguments),
             "LPUSH" => this.Lpush(arguments),
+            "LLEN" => this.Llen(arguments),
             _ => Types.GetSimpleString("ERROR no command specified"),
         };
     }
@@ -421,6 +428,16 @@ class Interpreter
         var start = Int32.Parse(arguments[1]);
         var end = Int32.Parse(arguments[2]);
         return Types.GetStringArray(Storage.Lrange(list, start, end));
+    }
+
+    // https://redis.io/docs/latest/commands/llen/
+    public string Llen(List<string> arguments)
+    {
+        if (arguments.Count != 1)
+        {
+            return Types.GetSimpleString("ERROR incorrect argument count");
+        }
+        return Types.GetInteger(Storage.Llen(arguments[0]));
     }
 }
 
