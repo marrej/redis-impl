@@ -237,6 +237,31 @@ class Storage
         }
         return slice;
     }
+
+    public List<string>? Lpop(string list, int count)
+    {
+        L.TryGetValue(list, out LinkedList<string>? arr);
+        if (arr == null || arr.Count == 0)
+        {
+            return null;
+        }
+
+        // Iterate over list, while an item can be popped.
+        List<string> popped = [];
+        var next = arr.First;
+        for (var i = 0; i < count; i++)
+        {
+            Console.WriteLine("POPPING");
+            if (next == null)
+            {
+                break;
+            }
+            popped.Add(next.Value);
+            next = next.Next;
+            arr.RemoveFirst();
+        }
+        return popped;
+    }
 }
 
 class TTLOptions
@@ -268,12 +293,15 @@ class Interpreter
             // TODO: refactor. Instead of returning direct value, after interpretation, this should just return a Command object that we can execute in some way?
             "PING" => Types.GetSimpleString("PONG"),
             "ECHO" => this.Echo(arguments),
+            // Item actions
             "GET" => this.Get(arguments),
             "SET" => this.Set(arguments),
+            // List actions
             "RPUSH" => this.Rpush(arguments),
             "LRANGE" => this.Lrange(arguments),
             "LPUSH" => this.Lpush(arguments),
             "LLEN" => this.Llen(arguments),
+            "LPOP" => this.Lpop(arguments),
             _ => Types.GetSimpleString("ERROR no command specified"),
         };
     }
@@ -439,6 +467,29 @@ class Interpreter
         }
         return Types.GetInteger(Storage.Llen(arguments[0]));
     }
+
+    public string Lpop(List<string> arguments)
+    {
+        if (arguments.Count < 1)
+        {
+            return Types.GetSimpleString("ERROR incorrect argument count");
+        }
+        var list = arguments[0];
+
+        // Always pops at least 1 item
+        var popFirst = arguments.Count != 2;
+        var count = Math.Max(popFirst ? 1 : Int32.Parse(arguments[1]),1);
+        var popped = Storage.Lpop(list, count);
+        if (popped == null)
+        {
+            return Types.GetBulkString(popped);
+        }
+        if (popFirst)
+        {
+            return Types.GetBulkString(popped);
+        }
+        return Types.GetStringArray(popped);
+    }
 }
 
 class Types
@@ -457,7 +508,10 @@ class Types
         {
             return bulkString + (-1).ToString() + "\r\n";
         }
-
+        if (inputs.Count == 0)
+        {
+            return bulkString + "0\r\n\r\n";
+        } 
         foreach (var a in inputs)
         {
             var len = a.Length + "\r\n";
