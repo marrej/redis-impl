@@ -171,6 +171,32 @@ class Storage
         L[list].Add(input);
         return L[list].Count;
     }
+
+    // Doesn't error out but instead returns empty array
+    public List<string> Lrange(string list, int start, int stop)
+    {
+        L.TryGetValue(list, out List<string>? arr);
+        if (arr == null)
+        {
+            return [];
+        }
+
+        // - index allows to get to the end of array.
+        if (stop < 0)
+        {
+            stop = arr.Count + stop;
+        }
+
+        // Avoids overruning the array
+        start = Math.Min(arr.Count - 1, start);
+        stop = Math.Min(arr.Count - 1, stop);
+
+        if (start > stop)
+        {
+            return [];
+        }
+        return arr[start..(stop + 1)];
+    }
 }
 
 class TTLOptions
@@ -205,6 +231,7 @@ class Interpreter
             "GET" => this.Get(arguments),
             "SET" => this.Set(arguments),
             "RPUSH" => this.Rpush(arguments),
+            "LRANGE" => this.Lrange(arguments),
             _ => Types.GetSimpleString("ERROR no command specified"),
         };
     }
@@ -332,6 +359,21 @@ class Interpreter
         }
         return Types.GetInteger(listLength);
     }
+
+    // https://redis.io/docs/latest/commands/lrange/
+    public string Lrange(List<string> arguments)
+    {
+        if (arguments.Count != 3)
+        {
+            return Types.GetSimpleString("ERROR incorrect argument count");
+        }
+
+        // INVARIANT: all args are provided
+        var list = arguments[0];
+        var start = Int32.Parse(arguments[1]);
+        var end = Int32.Parse(arguments[2]);
+        return Types.GetStringArray(Storage.Lrange(list, start, end));
+    }
 }
 
 class Types
@@ -364,6 +406,26 @@ class Types
     public static string GetInteger(int input)
     {
         return ":" + input.ToString() + "\r\n";
+    }
+
+    public static string GetStringArray(List<string> inputs)
+    {
+        var ret = "*" + inputs.Count.ToString() + "\r\n";
+        for (var i = 0; i < inputs.Count; i++)
+        {
+            ret += Types.GetBulkString([inputs[i]]);
+        }
+        return ret;
+    }
+    
+    public static string GetIntArray(List<int> inputs)
+    {
+        var ret = "*"+inputs.Count.ToString()+"\r\n";
+        for (var i = 0; i < inputs.Count; i++)
+        {
+            ret += Types.GetInteger(inputs[i]);
+        }
+        return ret;
     }
 }
 
