@@ -74,7 +74,7 @@ class CliInput
 
 class Storage
 {
-    readonly Dictionary<string, List<string>> L = [];
+    readonly Dictionary<string, LinkedList<string>> L = [];
     readonly Dictionary<string, string> S = [];
     readonly Dictionary<string, DateTime> TTLs = [];
 
@@ -168,14 +168,28 @@ class Storage
         {
             L[list] = [];
         }
-        L[list].Add(input);
+        L[list].AddLast(input);
+        return L[list].Count;
+    }
+
+    public int Lpush(string list, List<string> items)
+    {
+        if (!L.ContainsKey(list))
+        {
+            L[list] = [];
+        }
+
+        foreach (var i in items)
+        {
+            L[list].AddFirst(i);
+        }
         return L[list].Count;
     }
 
     // Doesn't error out but instead returns empty array
     public List<string> Lrange(string list, int start, int stop)
     {
-        L.TryGetValue(list, out List<string>? arr);
+        L.TryGetValue(list, out LinkedList<string>? arr);
         if (arr == null)
         {
             return [];
@@ -199,7 +213,23 @@ class Storage
         {
             return [];
         }
-        return arr[start..(stop + 1)];
+
+        // Retrieve the slice from the LinkedList
+        List<string> slice = [];
+        var index = 0;
+        foreach (var item in arr)
+        {
+            if (index > stop)
+            {
+                break;
+            }
+            if (index >= start && index <= stop)
+            {
+                slice.Add(item);
+            }
+            index++;
+        }
+        return slice;
     }
 }
 
@@ -236,6 +266,7 @@ class Interpreter
             "SET" => this.Set(arguments),
             "RPUSH" => this.Rpush(arguments),
             "LRANGE" => this.Lrange(arguments),
+            "LPUSH" => this.Lpush(arguments),
             _ => Types.GetSimpleString("ERROR no command specified"),
         };
     }
@@ -361,6 +392,19 @@ class Interpreter
             var item = arguments[i];
             listLength = this.Storage.Rpush(list, item);
         }
+        return Types.GetInteger(listLength);
+    }
+
+    // https://redis.io/docs/latest/commands/lpush/
+    public string Lpush(List<string> arguments)
+    {
+        if (arguments.Count < 2)
+        {
+            return Types.GetSimpleString("ERROR incorrect argument count");
+        }
+        var list = arguments[0];
+        var items = arguments[1..];
+        var listLength = this.Storage.Lpush(list, items);
         return Types.GetInteger(listLength);
     }
 
