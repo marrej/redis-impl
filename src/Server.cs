@@ -100,7 +100,7 @@ class Storage
     readonly Dictionary<string, LinkedList<string>> L = [];
     readonly Dictionary<string, BlockingQueue> LQ = [];
     // Sync property checking whether there is Update list in progress to avoid multi triggers on parallel pushes.
-    bool UpdatingListInProgress = false;
+    readonly HashSet<string> ListUpdatesInProgress = [];
     // Mutext used for popping data off the lists;
     readonly private Mutex BlockingPopMutex = new();
     readonly Dictionary<string, string> S = [];
@@ -128,8 +128,8 @@ class Storage
         L.TryGetValue(list, out LinkedList<string>? storage);
         if (storage == null || storage?.Count <= 0) { return; }
 
-        if (UpdatingListInProgress) { return; }
-        UpdatingListInProgress = true;
+        if (ListUpdatesInProgress.Contains(list)) { return; }
+        ListUpdatesInProgress.Add(list);
         while ((storage?.Count ?? 0) > 0)
         {
             var waiting = bq?.Tickets.First?.Value;
@@ -137,7 +137,11 @@ class Storage
             // Avoid running the queue if the last was already released
             if (waiting == null || last == null || last.Released) { break; }
             // Skip to the first waiting which was not yet released;
-            if (waiting.Released) { continue; }
+            if (waiting.Released)
+            {
+                bq?.Tickets.RemoveFirst();
+                continue;
+            }
             var item = this.Lpop(list, 1); ;
             if (item == null || item.Count < 1) { break; }
             waiting.Released = true;
@@ -146,7 +150,11 @@ class Storage
             waiting.Semaphore.Release();
             bq?.Tickets.RemoveFirst();
         }
-        UpdatingListInProgress = false;
+        if (bq?.Tickets.Count == 0)
+        {
+            LQ.Remove(list);
+        }
+        ListUpdatesInProgress.Remove(list);
     }
 
     public string Get(string key)
