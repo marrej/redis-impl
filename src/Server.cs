@@ -13,6 +13,7 @@ Console.WriteLine("Server Starting");
 TcpListener server = new(IPAddress.Any, 6379);
 server.Start();
 Storage storage = new();
+Parser parser = new();
 Console.WriteLine("Accepting at 6379");
 
 // A communication loop listenting to socket exchanges
@@ -24,7 +25,7 @@ while (true)
     // Resolves all commands sent from the socket in succession
 
     Thread conn = new Thread(ThreadLoop);
-    conn.Start(new CliInput { Socket = socket, Id = id, Storage = storage });
+    conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage });
     id++;
 }
 
@@ -32,8 +33,7 @@ void ThreadLoop(object data)
 {
     CliInput c = (CliInput)data;
     Console.WriteLine("Connected thread {0}", c.Id);
-    var parser = new Parser { };
-    var interpreter = new Interpreter { Storage = c.Storage};
+    Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id };
 
     while (true)
     {
@@ -47,7 +47,7 @@ void ThreadLoop(object data)
         var message = Encoding.ASCII.GetString(buffer);
         try
         {
-            var p = parser.Parse(message);
+            var p = c.Parser.Parse(message);
             var i = interpreter.Interpret(p);
             Console.WriteLine(i);
             // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
@@ -69,12 +69,40 @@ class CliInput
     required public int Id { get; set; }
     required public Socket Socket { get; set; }
 
+    required public Parser Parser { get; set; }
     required public Storage Storage { get; set; }
+}
+
+class WaitingTicket
+{
+    required public int ThreadId;
+    public DateTime? WaitUntil;
+    // Semaphore shared between multiple tickets of the same call
+    required public Semaphore Semaphore;
+
+    required public bool Released = false;
+
+    // List from where the value was popped
+    public string? List;
+    // Value that was popped
+
+    public string? Value;
+}
+
+// Contains all threads that are awaiting access to a List
+class BlockingQueue
+{
+    public readonly LinkedList<WaitingTicket> Tickets = [];
 }
 
 class Storage
 {
     readonly Dictionary<string, LinkedList<string>> L = [];
+    readonly Dictionary<string, BlockingQueue> LQ = [];
+    // Sync property checking whether there is Update list in progress to avoid multi triggers on parallel pushes.
+    bool UpdatingListInProgress = false;
+    // Mutext used for popping data off the lists;
+    readonly private Mutex BlockingPopMutex = new();
     readonly Dictionary<string, string> S = [];
     readonly Dictionary<string, DateTime> TTLs = [];
 
@@ -88,6 +116,37 @@ class Storage
             TTLs.Remove(key);
             S.Remove(key);
         }
+    }
+
+    // TODO: Add mutex to avoid running this operation multiple times while the first one may be still executed
+    public void DidUpdateList(string list)
+    {
+
+        LQ.TryGetValue(list, out BlockingQueue? bq);
+        if (bq == null || bq?.Tickets.Count <= 0) { return; }
+
+        L.TryGetValue(list, out LinkedList<string>? storage);
+        if (storage == null || storage?.Count <= 0) { return; }
+
+        if (UpdatingListInProgress) { return; }
+        UpdatingListInProgress = true;
+        while ((storage?.Count ?? 0) > 0)
+        {
+            var waiting = bq?.Tickets.First?.Value;
+            var last = bq?.Tickets.Last?.Value;
+            // Avoid running the queue if the last was already released
+            if (waiting == null || last == null || last.Released) { break; }
+            // Skip to the first waiting which was not yet released;
+            if (waiting.Released) { continue; }
+            var item = this.Lpop(list, 1); ;
+            if (item == null || item.Count < 1) { break; }
+            waiting.Released = true;
+            waiting.List = list;
+            waiting.Value = item[0];
+            waiting.Semaphore.Release();
+            bq?.Tickets.RemoveFirst();
+        }
+        UpdatingListInProgress = false;
     }
 
     public string Get(string key)
@@ -251,7 +310,6 @@ class Storage
         var next = arr.First;
         for (var i = 0; i < count; i++)
         {
-            Console.WriteLine("POPPING");
             if (next == null)
             {
                 break;
@@ -261,6 +319,64 @@ class Storage
             arr.RemoveFirst();
         }
         return popped;
+    }
+
+    // Returns List + value that was popped
+    // QQ: should we block if there is some thread that is trying to read the specific list which we want to pop?
+    // Otherwise there is possible race between the mutexed and the non mutexted thread??
+    public List<string>? Blpop(List<string> lists, int id, int timeout)
+    {
+        // TODO: wrap the semaphore with an object containing also "timeout passed"
+        Semaphore callBlocker = new(initialCount: 0, maximumCount: 1);
+        var ticket = new WaitingTicket { ThreadId = id, Semaphore = callBlocker, Released = false };
+        if (timeout > 0)
+        {
+            ticket.WaitUntil = DateTime.Now.AddSeconds(timeout);
+        }
+
+        // Block the queue creation to avoid ticket dissapearance and racing between blocking calls.
+        BlockingPopMutex.WaitOne();
+        try
+        {
+            foreach (var l in lists)
+            {
+                // If others are waiting, then add ourselves to the lists and wait
+                LQ.TryGetValue(l, out BlockingQueue? blockingQueue);
+                if (blockingQueue == null || blockingQueue.Tickets.Count <= 0 || blockingQueue.Tickets?.Last?.Value.Released == true)
+                {
+                    var val = this.Lpop(l, 1);
+                    if (val != null)
+                    {
+                        // TODO: remove all the past tickets (Connect the parent to the Next in the List)
+                        BlockingPopMutex.ReleaseMutex();
+                        return [l, val[0]];
+                    }
+                }
+
+                // TODO: wrap with mutex to avoid overriding the blocking queue
+                var bq = blockingQueue ?? new BlockingQueue { };
+                if (blockingQueue == null)
+                {
+                    LQ.Add(l, bq);
+                }
+                bq.Tickets.AddLast(ticket);
+            }
+        }
+        finally
+        { 
+            BlockingPopMutex.ReleaseMutex();    
+        }
+        BlockingPopMutex.ReleaseMutex();
+
+        // Wait for the ticket to be resolved
+        callBlocker.WaitOne();
+        // TODO: check whether was timeouted by checking a timeout dict, then we shoudl skip execution
+
+        if (ticket.List == null || ticket.Value == null)
+        {
+            return null;
+        }
+        return [ticket.List, ticket.Value];
     }
 }
 
@@ -284,6 +400,8 @@ class SetOptions
 class Interpreter
 {
     required public Storage Storage;
+    // Id of the current thread.
+    required public int Id;
     public string Interpret(List<string> p)
     {
         var command = p.Count > 0 ? p[0] : "ERROR";
@@ -302,6 +420,7 @@ class Interpreter
             "LPUSH" => this.Lpush(arguments),
             "LLEN" => this.Llen(arguments),
             "LPOP" => this.Lpop(arguments),
+            "BLPOP" => this.Blpop(arguments),
             _ => Types.GetSimpleString("ERROR no command specified"),
         };
     }
@@ -427,6 +546,8 @@ class Interpreter
             var item = arguments[i];
             listLength = this.Storage.Rpush(list, item);
         }
+        this.Storage.DidUpdateList(list);
+        // TODO: If no thread is processing, release, otherwise do nothing.
         return Types.GetInteger(listLength);
     }
 
@@ -440,6 +561,8 @@ class Interpreter
         var list = arguments[0];
         var items = arguments[1..];
         var listLength = this.Storage.Lpush(list, items);
+        this.Storage.DidUpdateList(list);
+        // TODO: If no thread is processing, release, otherwise do nothing.
         return Types.GetInteger(listLength);
     }
 
@@ -468,6 +591,25 @@ class Interpreter
         return Types.GetInteger(Storage.Llen(arguments[0]));
     }
 
+    // https://redis.io/docs/latest/commands/blpop/
+    public string Blpop(List<string> arguments)
+    {
+        if (arguments.Count < 2)
+        {
+            return Types.GetSimpleString("ERROR incorrect argument count");
+        }
+        // BLPOP key [key ...] timeout
+        var lists = arguments[0..(arguments.Count - 1)];
+        var timeout = Int32.Parse(arguments[^1]);
+        var ret = this.Storage.Blpop(lists, this.Id, timeout);
+
+        if (ret == null)
+        {
+            return Types.GetBulkString(null);
+        }
+        return Types.GetStringArray(ret);
+    }
+
     public string Lpop(List<string> arguments)
     {
         if (arguments.Count < 1)
@@ -478,7 +620,7 @@ class Interpreter
 
         // Always pops at least 1 item
         var popFirst = arguments.Count != 2;
-        var count = Math.Max(popFirst ? 1 : Int32.Parse(arguments[1]),1);
+        var count = Math.Max(popFirst ? 1 : Int32.Parse(arguments[1]), 1);
         var popped = Storage.Lpop(list, count);
         if (popped == null)
         {
