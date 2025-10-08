@@ -344,36 +344,30 @@ class Storage
 
         // Block the queue creation to avoid ticket dissapearance and racing between blocking calls.
         BlockingPopMutex.WaitOne();
-        try
+        foreach (var l in lists)
         {
-            foreach (var l in lists)
+            // If others are waiting, then add ourselves to the lists and wait
+            LQ.TryGetValue(l, out BlockingQueue? blockingQueue);
+            if (blockingQueue == null || blockingQueue.Tickets.Count <= 0 || blockingQueue.Tickets?.Last?.Value.Released == true)
             {
-                // If others are waiting, then add ourselves to the lists and wait
-                LQ.TryGetValue(l, out BlockingQueue? blockingQueue);
-                if (blockingQueue == null || blockingQueue.Tickets.Count <= 0 || blockingQueue.Tickets?.Last?.Value.Released == true)
+                var val = this.Lpop(l, 1);
+                if (val != null)
                 {
-                    var val = this.Lpop(l, 1);
-                    if (val != null)
-                    {
-                        // TODO: remove all the past tickets (Connect the parent to the Next in the List)
-                        BlockingPopMutex.ReleaseMutex();
-                        return [l, val[0]];
-                    }
+                    // TODO: remove all the past tickets (Connect the parent to the Next in the List)
+                    BlockingPopMutex.ReleaseMutex();
+                    return [l, val[0]];
                 }
-
-                // TODO: wrap with mutex to avoid overriding the blocking queue
-                var bq = blockingQueue ?? new BlockingQueue { };
-                if (blockingQueue == null)
-                {
-                    LQ.Add(l, bq);
-                }
-                bq.Tickets.AddLast(ticket);
             }
+
+            // TODO: wrap with mutex to avoid overriding the blocking queue
+            var bq = blockingQueue ?? new BlockingQueue { };
+            if (blockingQueue == null)
+            {
+                LQ.Add(l, bq);
+            }
+            bq.Tickets.AddLast(ticket);
         }
-        finally
-        { 
-            BlockingPopMutex.ReleaseMutex();    
-        }
+    
         BlockingPopMutex.ReleaseMutex();
 
         // Wait for the ticket to be resolved
