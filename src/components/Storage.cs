@@ -1,5 +1,16 @@
 namespace RedisImpl
 {
+    class StreamItem
+    {
+        public required string Id;
+        public required List<KeyValPair> KVs;
+    }
+
+    class KeyValPair
+    {
+        public required string Key;
+        public required string Val;
+    }
 
     class WaitingTicket
     {
@@ -42,7 +53,7 @@ namespace RedisImpl
     class Storage
     {
         // Stream only props
-        readonly Dictionary<string, object> Streams = [];
+        readonly Dictionary<string, LinkedList<StreamItem>> Streams = [];
 
         // List Only props
         readonly Dictionary<string, LinkedList<string>> Lists = [];
@@ -68,7 +79,7 @@ namespace RedisImpl
         }
 
         public bool HasStream(string name)
-        { 
+        {
             return Streams[name] != null;
         }
 
@@ -346,6 +357,15 @@ namespace RedisImpl
                 return null;
             }
             return [ticket.List, ticket.Value];
+        }
+
+        public string Xadd(string name, StreamItem item)
+        {
+            // If stream exists, we append, otherwise we create the stream.
+            Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
+            stream ??= new LinkedList<StreamItem>();
+            stream.AddLast(item);
+            return item.Id;
         }
     }
 }

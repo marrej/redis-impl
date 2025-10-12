@@ -14,6 +14,7 @@ namespace RedisImpl
                 // TODO: refactor. Instead of returning direct value, after interpretation, this should just return a Command object that we can execute in some way?
                 "PING" => Types.GetSimpleString("PONG"),
                 "ECHO" => this.Echo(arguments),
+                "TYPE" => this.Type(arguments),
                 // Item actions
                 "GET" => this.Get(arguments),
                 "SET" => this.Set(arguments),
@@ -24,7 +25,8 @@ namespace RedisImpl
                 "LLEN" => this.Llen(arguments),
                 "LPOP" => this.Lpop(arguments),
                 "BLPOP" => this.Blpop(arguments),
-                "TYPE" => this.Type(arguments),
+                // Stream actions
+                "XADD" => this.Xadd(arguments),
                 _ => Types.GetSimpleString("ERROR no command specified"),
             };
         }
@@ -129,8 +131,8 @@ namespace RedisImpl
 
             var val = this.Storage.Get(arguments[0]);
             if (val == null)
-            { 
-                return Types.GetBulkString(null);   
+            {
+                return Types.GetBulkString(null);
             }
             return Types.GetBulkString([val]);
         }
@@ -254,10 +256,35 @@ namespace RedisImpl
             }
             var hasStream = this.Storage.HasStream(property);
             if (hasStream)
-            { 
-               return Types.GetSimpleString("stream");
+            {
+                return Types.GetSimpleString("stream");
             }
             return Types.GetSimpleString("none");
+        }
+
+        // https://redis.io/docs/latest/commands/xadd/
+        public string Xadd(List<string> arguments)
+        {
+            if (arguments.Count < 4)
+            {
+                return Types.GetSimpleString("ERROR incorrect argument count");
+            }
+            var streamName = arguments[0];
+            // We are currently ignoring all modifiers
+            var id = arguments[1];
+
+            List<KeyValPair> kvs = [];
+            for (var i = 2; i < arguments.Count; i += 2)
+            {
+                // Should we ignore values that don't exist?
+                if (i + 1 < arguments.Count - 1)
+                {
+                    break;
+                }
+                kvs.Add(new KeyValPair { Key = arguments[i], Val = arguments[i + 1] });
+            }
+            var item = new StreamItem { Id = id, KVs = kvs };
+            return Types.GetBulkString([this.Storage.Xadd(streamName, item)]);
         }
     }
 }
