@@ -243,7 +243,21 @@ namespace RedisImpl
             // Accesses directly storage to avoid the formatiing abstractions
             Console.WriteLine("Access");
             var val = this.Storage.Get(property);
-            return Types.GetSimpleString(val != null ? "string" : "none");
+            if (val != null)
+            {
+                return Types.GetSimpleString("string");
+            }
+            var hasList = this.Storage.HasList(property);
+            if (hasList)
+            {
+                return Types.GetSimpleString("list");
+            }
+            var hasStream = this.Storage.HasStream(property);
+            if (hasStream)
+            { 
+               return Types.GetSimpleString("stream");
+            }
+            return Types.GetSimpleString("none");
         }
     }
 }

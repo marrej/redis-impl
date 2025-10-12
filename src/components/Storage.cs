@@ -41,13 +41,19 @@ namespace RedisImpl
     }
     class Storage
     {
-        readonly Dictionary<string, LinkedList<string>> L = [];
-        readonly Dictionary<string, BlockingQueue> LQ = [];
+        // Stream only props
+        readonly Dictionary<string, object> Streams = [];
+
+        // List Only props
+        readonly Dictionary<string, LinkedList<string>> Lists = [];
+        readonly Dictionary<string, BlockingQueue> BlockedListReaders = [];
         // Sync property checking whether there is Update list in progress to avoid multi triggers on parallel pushes.
         readonly HashSet<string> ListUpdatesInProgress = [];
         // Mutext used for popping data off the lists;
         readonly private Mutex BlockingPopMutex = new();
-        readonly Dictionary<string, string> S = [];
+
+        // KeyVal Only props
+        readonly Dictionary<string, string> KeyVals = [];
         readonly Dictionary<string, DateTime> TTLs = [];
 
         // Called on every interaction with the Storage to evaluate whether it shoudl evacuate a property.
@@ -57,18 +63,28 @@ namespace RedisImpl
             if (TTLs.ContainsKey(key) && TTLs[key] < DateTime.Now)
             {
                 TTLs.Remove(key);
-                S.Remove(key);
+                KeyVals.Remove(key);
             }
+        }
+
+        public bool HasStream(string name)
+        { 
+            return Streams[name] != null;
+        }
+
+        public bool HasList(string name)
+        {
+            return Lists[name] != null;
         }
 
         // TODO: make async so that the update runs on a new thread and doesn't blockt he push caller.
         public void DidUpdateList(string list)
         {
 
-            LQ.TryGetValue(list, out BlockingQueue? bq);
+            BlockedListReaders.TryGetValue(list, out BlockingQueue? bq);
             if (bq == null || bq?.Tickets.Count <= 0) { return; }
 
-            L.TryGetValue(list, out LinkedList<string>? storage);
+            Lists.TryGetValue(list, out LinkedList<string>? storage);
             if (storage == null || storage?.Count <= 0) { return; }
 
             if (ListUpdatesInProgress.Contains(list)) { return; }
@@ -95,7 +111,7 @@ namespace RedisImpl
             }
             if (bq?.Tickets.Count == 0)
             {
-                LQ.Remove(list);
+                BlockedListReaders.Remove(list);
             }
             ListUpdatesInProgress.Remove(list);
         }
@@ -103,7 +119,7 @@ namespace RedisImpl
         public string? Get(string key)
         {
             this.EvaluateTTL(key);
-            if (!S.TryGetValue(key, out string? value))
+            if (!KeyVals.TryGetValue(key, out string? value))
             {
                 return null;
             }
@@ -115,27 +131,27 @@ namespace RedisImpl
             this.EvaluateTTL(key);
             if (options == null)
             {
-                S[key] = val;
+                KeyVals[key] = val;
                 return;
             }
 
             var insertedValue = false;
-            S.TryGetValue(key, out string? value);
+            KeyVals.TryGetValue(key, out string? value);
             // Conditionally inserts the value. If not condition is set then inserts
             if (value != null && options.AddOnlyIfAlreadyDefined)
             {
                 insertedValue = true;
-                S[key] = val;
+                KeyVals[key] = val;
             }
             else if (value == null && options.AddOnlyIfNotDefined)
             {
                 insertedValue = true;
-                S[key] = val;
+                KeyVals[key] = val;
             }
             else if (!options.AddOnlyIfAlreadyDefined && !options.AddOnlyIfNotDefined)
             {
                 insertedValue = true;
-                S[key] = val;
+                KeyVals[key] = val;
             }
             else
             {
@@ -174,38 +190,38 @@ namespace RedisImpl
 
         public int Rpush(string list, string input)
         {
-            if (!L.ContainsKey(list))
+            if (!Lists.ContainsKey(list))
             {
-                L[list] = [];
+                Lists[list] = [];
             }
-            L[list].AddLast(input);
-            return L[list].Count;
+            Lists[list].AddLast(input);
+            return Lists[list].Count;
         }
 
         public int Lpush(string list, List<string> items)
         {
-            if (!L.ContainsKey(list))
+            if (!Lists.ContainsKey(list))
             {
-                L[list] = [];
+                Lists[list] = [];
             }
 
             foreach (var i in items)
             {
-                L[list].AddFirst(i);
+                Lists[list].AddFirst(i);
             }
-            return L[list].Count;
+            return Lists[list].Count;
         }
 
         public int Llen(string list)
         {
-            L.TryGetValue(list, out LinkedList<string>? arr);
+            Lists.TryGetValue(list, out LinkedList<string>? arr);
             return arr == null ? 0 : arr.Count;
         }
 
         // Doesn't error out but instead returns empty array
         public List<string> Lrange(string list, int start, int stop)
         {
-            L.TryGetValue(list, out LinkedList<string>? arr);
+            Lists.TryGetValue(list, out LinkedList<string>? arr);
             if (arr == null)
             {
                 return [];
@@ -250,7 +266,7 @@ namespace RedisImpl
 
         public List<string>? Lpop(string list, int count)
         {
-            L.TryGetValue(list, out LinkedList<string>? arr);
+            Lists.TryGetValue(list, out LinkedList<string>? arr);
             if (arr == null || arr.Count == 0)
             {
                 return null;
@@ -284,7 +300,7 @@ namespace RedisImpl
             foreach (var l in lists)
             {
                 // If others are waiting, then add ourselves to the lists and wait
-                LQ.TryGetValue(l, out BlockingQueue? blockingQueue);
+                BlockedListReaders.TryGetValue(l, out BlockingQueue? blockingQueue);
                 if (blockingQueue == null || blockingQueue.Tickets.Count <= 0 || blockingQueue.Tickets?.Last?.Value.Released == true)
                 {
                     var val = this.Lpop(l, 1);
@@ -300,7 +316,7 @@ namespace RedisImpl
                 var bq = blockingQueue ?? new BlockingQueue { };
                 if (blockingQueue == null)
                 {
-                    LQ.Add(l, bq);
+                    BlockedListReaders.Add(l, bq);
                 }
                 bq.Tickets.AddLast(ticket);
             }
