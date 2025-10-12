@@ -133,8 +133,8 @@ class Storage
         {
             var waiting = bq?.Tickets.First?.Value;
             var last = bq?.Tickets.Last?.Value;
-            // Avoid running the queue if the last was already released
-            if (waiting == null || last == null || last.Released) { break; }
+            // Don't break on last, since the last could have timeouted early
+            if (waiting == null || last == null) { break; }
             // Skip to the first waiting which was not yet released;
             if (waiting.Released)
             {
@@ -372,6 +372,8 @@ class Storage
         { 
             timer = new Timer((object threadIdArg) =>
             {
+                // TODO (minor): note that this can cause the awaiting chain to grow without any cleanup.
+                // Maybe we should trigerr the cleanup here?
                 ticket.Released = true;
                 ticket.Semaphore.Release();
                 timer?.Dispose();
