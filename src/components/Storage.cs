@@ -469,15 +469,11 @@ namespace RedisImpl
             }
             var ts = start.Split("-");
             var te = end.Split("-");
-            if (ts.Length != 2 || te.Length != 2)
-            {
-                throw new Exception("ERR incorrect ids");
-            }
             var sTime = Int32.Parse(ts[0]);
-            var sSerie = Int32.Parse(ts[1]);
+            var sSerie = ts.Length == 1 ? 0 : Int32.Parse(ts[1]);
 
             var eTime = Int32.Parse(te[0]);
-            var eSerie = Int32.Parse(te[1]);
+            var eSerie = te.Length == 1 ? Int32.MaxValue : Int32.Parse(te[1]);
 
             List<object> ret = [];
             foreach (var v in stream)
