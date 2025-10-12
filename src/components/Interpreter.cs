@@ -24,6 +24,7 @@ namespace RedisImpl
                 "LLEN" => this.Llen(arguments),
                 "LPOP" => this.Lpop(arguments),
                 "BLPOP" => this.Blpop(arguments),
+                "TYPE" => this.Type(arguments),
                 _ => Types.GetSimpleString("ERROR no command specified"),
             };
         }
@@ -125,15 +126,13 @@ namespace RedisImpl
             {
                 return Types.GetSimpleString("ERROR missing key");
             }
-            try
-            {
-                var val = this.Storage.Get(arguments[0]);
-                return Types.GetBulkString([val]);
+
+            var val = this.Storage.Get(arguments[0]);
+            if (val == null)
+            { 
+                return Types.GetBulkString(null);   
             }
-            catch (Exception)
-            {
-                return Types.GetBulkString(null);
-            }
+            return Types.GetBulkString([val]);
         }
 
         public string Rpush(List<string> arguments)
@@ -230,6 +229,21 @@ namespace RedisImpl
                 return Types.GetBulkString(popped);
             }
             return Types.GetStringArray(popped);
+        }
+
+        public string Type(List<string> arguments)
+        {
+            if (arguments.Count != 1)
+            {
+                return Types.GetSimpleString("ERROR incorrect argument count");
+            }
+            var property = arguments[0];
+
+            // TODO: add other field retrievals (e.g. from list, currently retrieves only from the single kay val)
+            // Accesses directly storage to avoid the formatiing abstractions
+            Console.WriteLine("Access");
+            var val = this.Storage.Get(property);
+            return Types.GetSimpleString(val != null ? "string" : "none");
         }
     }
 }

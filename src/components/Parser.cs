@@ -5,6 +5,7 @@ namespace RedisImpl
     {
         public List<string> Parse(string input)
         {
+            Console.WriteLine(input);
             // The input contains
             // - *paramcount\r\n
             // - $length\r\n

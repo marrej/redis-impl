@@ -100,12 +100,12 @@ namespace RedisImpl
             ListUpdatesInProgress.Remove(list);
         }
 
-        public string Get(string key)
+        public string? Get(string key)
         {
             this.EvaluateTTL(key);
             if (!S.TryGetValue(key, out string? value))
             {
-                throw new Exception("Value not found");
+                return null;
             }
             return value;
         }
