@@ -329,8 +329,6 @@ class Storage
     }
 
     // Returns List + value that was popped
-    // QQ: should we block if there is some thread that is trying to read the specific list which we want to pop?
-    // Otherwise there is possible race between the mutexed and the non mutexted thread??
     public List<string>? Blpop(List<string> lists, int id, double timeout)
     {
         // TODO: wrap the semaphore with an object containing also "timeout passed"
@@ -614,10 +612,6 @@ class Interpreter
         var timeout = Double.Parse(arguments[^1]);
         var ret = this.Storage.Blpop(lists, this.Id, timeout);
 
-        if (ret == null)
-        {
-            return Types.GetBulkString(null);
-        }
         return Types.GetStringArray(ret);
     }
 
@@ -680,8 +674,13 @@ class Types
         return ":" + input.ToString() + "\r\n";
     }
 
-    public static string GetStringArray(List<string> inputs)
+    // https://redis.io/docs/latest/develop/reference/protocol-spec/#arrays
+    public static string GetStringArray(List<string>? inputs)
     {
+        if (inputs == null)
+        {
+            return "*-1\r\n";
+        }
         var ret = "*" + inputs.Count.ToString() + "\r\n";
         for (var i = 0; i < inputs.Count; i++)
         {
