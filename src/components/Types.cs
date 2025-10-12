@@ -1,8 +1,18 @@
 namespace RedisImpl
 {
+    class ErrorType
+    { 
+        public static string ERR = "ERR";
+    }
 
     class Types
     {
+        // https://redis.io/docs/latest/develop/reference/protocol-spec/#simple-errors
+        public static string GetSimpleError(string message)
+        {
+            return "-" + message + "\r\n";
+        }
+
         // https://redis.io/docs/latest/develop/reference/protocol-spec/#simple-strings
         public static string GetSimpleString(string i)
         {

@@ -359,8 +359,69 @@ namespace RedisImpl
             return [ticket.List, ticket.Value];
         }
 
+        // Allows user to either euto generate the whole Id via *
+        // or just generate the next sessionId via TimeStamp-*
+        // But unless * is used, new TS needs to be >, or the = with the SessionId increased.
+        private string? ValidateAndGenerateXId(string name, StreamItem item)
+        {
+            if (item.Id == "0-0")
+            {
+                throw new Exception("ERR The ID specified in XADD must be greater than 0-0");
+            }
+
+            var id = item.Id;
+            string[] timeStampAndSerieNumber = id.Split("-");
+            bool generateAll = id == "*";
+            if (!generateAll && timeStampAndSerieNumber.Length != 2)
+            {
+                return null;
+            }
+
+            Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
+            var lastId = stream?.Last?.Value.Id;
+            int? lastT = null;
+            int? lastS = null;
+            if (lastId != null)
+            {
+                var lastTimeAndSerie = lastId.Split("-");
+                lastT = Int32.Parse(lastTimeAndSerie[0]);
+                lastS = Int32.Parse(lastTimeAndSerie[1]);
+            }
+
+            if (generateAll)
+            {
+                if (lastT != null)
+                {
+                    return lastT + "-" + (lastS + 1).ToString();
+                }
+                else
+                {
+                    return DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() + "-0";
+                }
+            }
+
+            var T = Int32.Parse(timeStampAndSerieNumber[0]);
+            var S = timeStampAndSerieNumber[1];
+            if (lastT > T)
+            {
+                return null;
+            }
+            if (lastT == T && S != "*" && (Int32.Parse(S) <= lastS))
+            {
+                return null;
+            }
+
+            if (S == "*")
+            {
+                // If has lastSerie then will be +1 otherwise 0
+                return T + "-" + (lastS != null ? lastS + 1 : 0).ToString();
+            }
+            return item.Id;
+        }
+
         public string Xadd(string name, StreamItem item)
         {
+            item.Id = this.ValidateAndGenerateXId(name, item) ?? throw new Exception("ERR The ID specified in XADD is equal or smaller than the target stream top item");
             // If stream exists, we append, otherwise we create the stream.
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
             if (stream == null)

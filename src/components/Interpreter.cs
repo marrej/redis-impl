@@ -286,7 +286,14 @@ namespace RedisImpl
                 kvs.Add(new KeyValPair { Key = arguments[i], Val = arguments[i + 1] });
             }
             var item = new StreamItem { Id = id, KVs = kvs };
-            return Types.GetBulkString([this.Storage.Xadd(streamName, item)]);
+            try
+            {
+                return Types.GetBulkString([this.Storage.Xadd(streamName, item)]);
+            }
+            catch (Exception e)
+            {
+                return Types.GetSimpleError(e.Message);
+            }
         }
     }
 }
