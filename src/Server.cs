@@ -76,7 +76,6 @@ class CliInput
 class WaitingTicket
 {
     required public int ThreadId;
-    public DateTime? WaitUntil;
     // Semaphore shared between multiple tickets of the same call
     required public Semaphore Semaphore;
 
@@ -118,7 +117,7 @@ class Storage
         }
     }
 
-    // TODO: Add mutex to avoid running this operation multiple times while the first one may be still executed
+    // TODO: make async so that the update runs on a new thread and doesn't blockt he push caller.
     public void DidUpdateList(string list)
     {
 
@@ -332,15 +331,11 @@ class Storage
     // Returns List + value that was popped
     // QQ: should we block if there is some thread that is trying to read the specific list which we want to pop?
     // Otherwise there is possible race between the mutexed and the non mutexted thread??
-    public List<string>? Blpop(List<string> lists, int id, int timeout)
+    public List<string>? Blpop(List<string> lists, int id, double timeout)
     {
         // TODO: wrap the semaphore with an object containing also "timeout passed"
         Semaphore callBlocker = new(initialCount: 0, maximumCount: 1);
         var ticket = new WaitingTicket { ThreadId = id, Semaphore = callBlocker, Released = false };
-        if (timeout > 0)
-        {
-            ticket.WaitUntil = DateTime.Now.AddSeconds(timeout);
-        }
 
         // Block the queue creation to avoid ticket dissapearance and racing between blocking calls.
         BlockingPopMutex.WaitOne();
@@ -370,9 +365,21 @@ class Storage
     
         BlockingPopMutex.ReleaseMutex();
 
+        // Using direct timeout to signal the semaphore. SpinWaits might be effective in short term,
+        // but if we wait for 5 secs or logner its totally unnecessary CPU hogging
+        Timer? timer = null;
+        if (timeout > 0)
+        { 
+            timer = new Timer((object threadIdArg) =>
+            {
+                ticket.Released = true;
+                ticket.Semaphore.Release();
+                timer?.Dispose();
+            }, null, Convert.ToInt32(1000*timeout), 500);   
+        }
+
         // Wait for the ticket to be resolved
         callBlocker.WaitOne();
-        // TODO: check whether was timeouted by checking a timeout dict, then we shoudl skip execution
 
         if (ticket.List == null || ticket.Value == null)
         {
@@ -602,7 +609,7 @@ class Interpreter
         }
         // BLPOP key [key ...] timeout
         var lists = arguments[0..(arguments.Count - 1)];
-        var timeout = Int32.Parse(arguments[^1]);
+        var timeout = Double.Parse(arguments[^1]);
         var ret = this.Storage.Blpop(lists, this.Id, timeout);
 
         if (ret == null)
