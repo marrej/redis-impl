@@ -80,12 +80,12 @@ namespace RedisImpl
 
         public bool HasStream(string name)
         {
-            return Streams[name] != null;
+            return Streams.ContainsKey(name);
         }
 
         public bool HasList(string name)
         {
-            return Lists[name] != null;
+            return Lists.ContainsKey(name);
         }
 
         // TODO: make async so that the update runs on a new thread and doesn't blockt he push caller.
@@ -363,7 +363,11 @@ namespace RedisImpl
         {
             // If stream exists, we append, otherwise we create the stream.
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
-            stream ??= new LinkedList<StreamItem>();
+            if (stream == null)
+            {
+                stream ??= new LinkedList<StreamItem>();
+                Streams[name] = stream;
+            }
             stream.AddLast(item);
             return item.Id;
         }

@@ -243,22 +243,24 @@ namespace RedisImpl
 
             // TODO: add other field retrievals (e.g. from list, currently retrieves only from the single kay val)
             // Accesses directly storage to avoid the formatiing abstractions
-            Console.WriteLine("Access");
             var val = this.Storage.Get(property);
             if (val != null)
             {
                 return Types.GetSimpleString("string");
             }
+            Console.WriteLine("Access");
             var hasList = this.Storage.HasList(property);
             if (hasList)
             {
                 return Types.GetSimpleString("list");
             }
+            Console.WriteLine("bubo");
             var hasStream = this.Storage.HasStream(property);
             if (hasStream)
             {
                 return Types.GetSimpleString("stream");
             }
+            Console.WriteLine("buba");
             return Types.GetSimpleString("none");
         }
 
