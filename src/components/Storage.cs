@@ -413,8 +413,9 @@ namespace RedisImpl
 
             if (S == "*")
             {
-                // If has lastSerie then will be +1 otherwise 0
-                return T + "-" + (lastS != null ? lastS + 1 : 0).ToString();
+                // If the Time is 0, then the serie number default is 1;
+                int defaultSerieNumber = (T == 0 ? 1 : 0);
+                return T + "-" + (lastS != null && lastT == T ? lastS + 1 : defaultSerieNumber).ToString();
             }
             return item.Id;
         }
