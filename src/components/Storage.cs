@@ -396,7 +396,7 @@ namespace RedisImpl
                 }
                 else
                 {
-                    return DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString() + "-0";
+                    return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString() + "-0";
                 }
             }
 
