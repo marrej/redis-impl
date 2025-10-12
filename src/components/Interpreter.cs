@@ -27,6 +27,7 @@ namespace RedisImpl
                 "BLPOP" => this.Blpop(arguments),
                 // Stream actions
                 "XADD" => this.Xadd(arguments),
+                "XRANGE" => this.XRange(arguments),
                 _ => Types.GetSimpleString("ERROR no command specified"),
             };
         }
@@ -285,7 +286,7 @@ namespace RedisImpl
                 }
                 kvs.Add(new KeyValPair { Key = arguments[i], Val = arguments[i + 1] });
             }
-            var item = new StreamItem { Id = id, KVs = kvs };
+            var item = new StreamItem { Id = id, KVs = kvs, Time = 0, SerieId = 0 };
             try
             {
                 return Types.GetBulkString([this.Storage.Xadd(streamName, item)]);
@@ -294,6 +295,19 @@ namespace RedisImpl
             {
                 return Types.GetSimpleError(e.Message);
             }
+        }
+
+        // https://redis.io/docs/latest/commands/xadd/
+        public string XRange(List<string> arguments)
+        {
+            if (arguments.Count != 3)
+            {
+                return Types.GetSimpleError("ERR incorrect param count");
+            }
+            var stream = arguments[0];
+            var start = arguments[1];
+            var end = arguments[2];
+            return Types.GetArray(this.Storage.Xrange(stream, start, end));
         }
     }
 }

@@ -61,6 +61,31 @@ namespace RedisImpl
             return ret;
         }
 
+        public static string GetArray(List<object>? inputs)
+        {
+            if (inputs == null)
+            {
+                return "*-1\r\n";
+            }
+            var ret = "*" + inputs.Count.ToString() + "\r\n";
+            for (var i = 0; i < inputs.Count; i++)
+            {
+                if (inputs[i] is string)
+                {
+                    ret += Types.GetBulkString([(string)inputs[i]]);
+                }
+                else if (inputs[i] is int)
+                {
+                    ret += Types.GetInteger((int)inputs[i]);
+                }
+                else if (inputs[i] is List<string> || inputs[i] is List<int>)
+                {
+                    ret += Types.GetArray((List<object>)inputs[i]);   
+                }
+            }
+            return ret;
+        }
+
         public static string GetIntArray(List<int> inputs)
         {
             var ret = "*" + inputs.Count.ToString() + "\r\n";

@@ -3,7 +3,23 @@ namespace RedisImpl
     class StreamItem
     {
         public required string Id;
+        // Time and SerieId are derivatives of Id, but allow quicker comparison
+        public required int Time;
+        public required int SerieId;
         public required List<KeyValPair> KVs;
+
+        public List<object> ToList()
+        {
+            List<string> kvList = [];
+            foreach (var kv in KVs) {
+                kvList.Add(kv.Key);
+                kvList.Add(kv.Val);
+            }
+            return [
+                Id,
+                kvList
+            ];
+        }
     }
 
     class KeyValPair
@@ -423,6 +439,14 @@ namespace RedisImpl
         public string Xadd(string name, StreamItem item)
         {
             item.Id = this.ValidateAndGenerateXId(name, item) ?? throw new Exception("ERR The ID specified in XADD is equal or smaller than the target stream top item");
+            var tAndS = item.Id.Split("-");
+            if (tAndS.Length != 2)
+            {
+                throw new Exception("ERR incorrect id");
+            }
+            item.Time = Int32.Parse(tAndS[0]);
+            item.SerieId = Int32.Parse(tAndS[1]);
+
             // If stream exists, we append, otherwise we create the stream.
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
             if (stream == null)
@@ -432,6 +456,43 @@ namespace RedisImpl
             }
             stream.AddLast(item);
             return item.Id;
+        }
+
+        public List<object>? Xrange(string name, string start, string end)
+        {
+            Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
+            if (stream == null)
+            {
+                return null;
+            }
+            var ts = start.Split("-");
+            var te = end.Split("-");
+            if (ts.Length != 2 || te.Length != 2)
+            {
+                throw new Exception("ERR incorrect ids");
+            }
+            var sTime = Int32.Parse(ts[0]);
+            var sSerie = Int32.Parse(ts[1]);
+
+            var eTime = Int32.Parse(te[0]);
+            var eSerie = Int32.Parse(te[1]);
+
+            List<object> ret = [];
+
+            foreach (var v in stream.AsEnumerable())
+            {
+                var afterStart = v.Time > sTime;
+                var atTimeStart = v.Time == sTime && v.SerieId >= sSerie;
+
+                var beforeEnd = v.Time < eTime;
+                var atTimeEnd = v.Time == eTime && v.SerieId <= eSerie;
+                if ((afterStart || atTimeStart) && (beforeEnd || atTimeEnd))
+                {
+                    ret.Add(v.ToList());
+                }
+            }
+
+            return ret;
         }
     }
 }
