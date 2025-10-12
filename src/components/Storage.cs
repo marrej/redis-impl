@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace RedisImpl
 {
     class StreamItem
@@ -478,8 +480,7 @@ namespace RedisImpl
             var eSerie = Int32.Parse(te[1]);
 
             List<object> ret = [];
-
-            foreach (var v in stream.AsEnumerable())
+            foreach (var v in stream)
             {
                 var afterStart = v.Time > sTime;
                 var atTimeStart = v.Time == sTime && v.SerieId >= sSerie;
@@ -491,7 +492,6 @@ namespace RedisImpl
                     ret.Add(v.ToList());
                 }
             }
-
             return ret;
         }
     }

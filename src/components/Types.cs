@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace RedisImpl
 {
     class ErrorType
@@ -78,9 +80,17 @@ namespace RedisImpl
                 {
                     ret += Types.GetInteger((int)inputs[i]);
                 }
-                else if (inputs[i] is List<string> || inputs[i] is List<int>)
+                else if (inputs[i] is List<string>)
                 {
-                    ret += Types.GetArray((List<object>)inputs[i]);   
+                    ret += Types.GetStringArray((List<string>)inputs[i]);
+                }
+                else if (inputs[i] is List<int>)
+                {
+                    ret += Types.GetIntArray((List<int>)inputs[i]);
+                }
+                else if (inputs[i] is List<object>)
+                {
+                    ret += Types.GetArray((List<object>)inputs[i]);
                 }
             }
             return ret;
