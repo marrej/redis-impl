@@ -462,16 +462,55 @@ namespace RedisImpl
             return item.Id;
         }
 
-        public List<object>? Xread(string[] name, string[] start)
+        public List<object>? Xread(string[] name, string[] start, int blockMs)
         {
             if (name.Length != start.Length)
             {
                 throw new Exception("ERR Keys don't align with start ids");
             }
+            // if blockMs > 0 we are blocking
+            // 1. Create a semaphore ticket for streams - add do Dictionary
+            // 2. Iterate through all streams. If any of them has Last val lower then the start then start blocking
+            // 3. Create a timeout
+            // -- cleanup all dictionaries after timeout passes and allow the 
+            if (blockMs > 0)
+            {
+                Semaphore semaphore = new(initialCount: 0, maximumCount: 1);
+                for (var i = 0; i < name.Length; i++)
+                {
+                    var n = name[i];
+                    var s = start[i];
+                    var (sTime, sSerie) = GetStreamStart(s);
+
+                    var stream = this.Streams[n];
+                    if (stream == null || stream.Count == 0)
+                    {
+                        // TODO: automatically await
+                        continue;
+                    }
+
+                    var streamVal = stream?.Last?.Value;
+                    if (streamVal == null)
+                    {
+                        // TODO: automatically await
+                        continue;
+                    }
+
+                    var vTime = streamVal.Time;
+                    var vSerie = streamVal.SerieId;
+                    if (vTime < sTime || (vTime == sTime && vSerie < sSerie))
+                    {
+                        // TODO: automatically await
+                        continue;    
+                    }
+                }
+                semaphore.WaitOne();
+            }
+
             List<object> streams = [];
             for (var i = 0; i < name.Length; i++)
             {
-                var stream = this.Xrange(name[i], start[i], "+", false);
+                var stream = this.Xrange(name[i], start[i], "+", /*startInclusive=*/false);
                 if (stream == null)
                 {
                     continue;
@@ -482,6 +521,22 @@ namespace RedisImpl
             return streams;
         }
 
+        private static (Int128 t, Int64 s) GetStreamStart(string start)
+        {
+            var ts = start == "-" ? ["0"] : start.Split("-");
+            Int128 sTime = Int128.Parse(ts[0]);
+            Int64 sSerie = ts.Length == 1 ? 0 : Int64.Parse(ts[1]);
+            return (sTime, sSerie);
+        }
+
+        private static (Int128 t, Int64 s) GetStreamEnd(string end)
+        {
+            var te = end == "+" ? [Int64.MaxValue.ToString()] : end.Split("-");
+            Int128 eTime = Int128.Parse(te[0]);
+            Int64 eSerie = te.Length == 1 ? Int64.MaxValue : Int64.Parse(te[1]);
+            return (eTime, eSerie);
+        }
+
         public List<object>? Xrange(string name, string start, string end, bool startInclusive = true)
         {
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
@@ -489,13 +544,8 @@ namespace RedisImpl
             {
                 return null;
             }
-            var ts = start == "-" ? ["0"] : start.Split("-");
-            var te = end == "+" ? [Int64.MaxValue.ToString()] : end.Split("-");
-            Int128 sTime = Int128.Parse(ts[0]);
-            Int64 sSerie = ts.Length == 1 ? 0 : Int64.Parse(ts[1]);
-
-            Int128 eTime = Int128.Parse(te[0]);
-            Int64 eSerie = te.Length == 1 ? Int64.MaxValue : Int64.Parse(te[1]);
+            var (sTime, sSerie) = GetStreamStart(start);
+            var (eTime, eSerie) = GetStreamEnd(end);
 
             List<object> ret = [];
             foreach (var v in stream)
