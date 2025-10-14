@@ -470,11 +470,11 @@ namespace RedisImpl
             }
             var ts = start.Split("-");
             var te = end.Split("-");
-            var sTime = Int32.Parse(ts[0]);
-            var sSerie = ts.Length == 1 ? 0 : Int32.Parse(ts[1]);
+            Int128 sTime = Int128.Parse(ts[0]);
+            Int64 sSerie = ts.Length == 1 ? 0 : Int64.Parse(ts[1]);
 
-            var eTime = Int32.Parse(te[0]);
-            var eSerie = te.Length == 1 ? Int32.MaxValue : Int32.Parse(te[1]);
+            Int128 eTime = Int128.Parse(te[0]);
+            Int64 eSerie = te.Length == 1 ? Int64.MaxValue : Int64.Parse(te[1]);
 
             List<object> ret = [];
             foreach (var v in stream)
