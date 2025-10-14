@@ -469,7 +469,7 @@ namespace RedisImpl
                 return null;
             }
             var ts = start == "-" ? ["0"] : start.Split("-");
-            var te = end.Split("-");
+            var te = end == "+" ? [Int64.MaxValue.ToString()] : end.Split("-");
             Int128 sTime = Int128.Parse(ts[0]);
             Int64 sSerie = ts.Length == 1 ? 0 : Int64.Parse(ts[1]);
 
