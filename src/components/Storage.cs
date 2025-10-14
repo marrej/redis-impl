@@ -522,7 +522,7 @@ namespace RedisImpl
 
                 var vTime = streamVal.Time;
                 var vSerie = streamVal.SerieId;
-                if (vTime > sTime || (vTime == sTime && vSerie >= sSerie))
+                if (vTime > sTime || (vTime == sTime && vSerie > sSerie))
                 {
                     // Don't add the semaphore in case there are already values
                     continue;
@@ -568,9 +568,9 @@ namespace RedisImpl
             for (var i = 0; i < name.Length; i++)
             {
                 var stream = this.Xrange(name[i], start[i], "+", /*startInclusive=*/false);
-                if (stream == null)
+                if (stream == null || stream.Count == 0)
                 {
-                    continue;
+                    return null;
                 }
 
                 streams.Add(new List<object> { name[i], stream });
