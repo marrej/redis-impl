@@ -73,6 +73,7 @@ namespace RedisImpl
     {
         // Stream only props
         readonly Dictionary<string, LinkedList<StreamItem>> Streams = [];
+        readonly Dictionary<string, List<Semaphore>> StreamBlocks = [];
 
         // List Only props
         readonly Dictionary<string, LinkedList<string>> Lists = [];
@@ -462,49 +463,74 @@ namespace RedisImpl
             return item.Id;
         }
 
+        private void AddStreamBlock(string n, Semaphore s)
+        { 
+            StreamBlocks.TryGetValue(n, out List<Semaphore>? blocks);
+            if (blocks == null)
+            {
+                StreamBlocks[n] = [];
+            }
+            StreamBlocks[n].Add(s);
+        }
+
+        private void XreadBlock(string[] names, string[] starts, int blockMs)
+        {
+            Semaphore semaphore = new(initialCount: 0, maximumCount: 1);
+            for (var i = 0; i < names.Length; i++)
+            {
+                var n = names[i];
+                var s = starts[i];
+                var (sTime, sSerie) = GetStreamStart(s);
+
+                var stream = this.Streams[n];
+                if (stream == null || stream.Count == 0)
+                {
+                    this.AddStreamBlock(n, semaphore);
+                    continue;
+                }
+
+                var streamVal = stream?.Last?.Value;
+                if (streamVal == null)
+                {
+                    this.AddStreamBlock(n, semaphore);
+                    continue;
+                }
+
+                var vTime = streamVal.Time;
+                var vSerie = streamVal.SerieId;
+                if (vTime > sTime || (vTime == sTime && vSerie >= sSerie))
+                {
+                    // Don't add the semaphore in case there are already values
+                    continue;
+                }
+                this.AddStreamBlock(n, semaphore);
+            }
+            
+            Timer? timer = null;
+            if (blockMs > 0)
+            {
+                timer = new Timer((object threadIdArg) =>
+                {
+                    // TODO (minor): note that this can cause the awaiting chain to grow without any cleanup.
+                    // Maybe we should trigerr the cleanup here?
+                    semaphore.Release();
+                    timer?.Dispose();
+                }, null, blockMs, 500);
+            }
+
+            semaphore.WaitOne();
+        }
+
         public List<object>? Xread(string[] name, string[] start, int blockMs)
         {
             if (name.Length != start.Length)
             {
                 throw new Exception("ERR Keys don't align with start ids");
             }
-            // if blockMs > 0 we are blocking
-            // 1. Create a semaphore ticket for streams - add do Dictionary
-            // 2. Iterate through all streams. If any of them has Last val lower then the start then start blocking
-            // 3. Create a timeout
-            // -- cleanup all dictionaries after timeout passes and allow the 
+
             if (blockMs > 0)
             {
-                Semaphore semaphore = new(initialCount: 0, maximumCount: 1);
-                for (var i = 0; i < name.Length; i++)
-                {
-                    var n = name[i];
-                    var s = start[i];
-                    var (sTime, sSerie) = GetStreamStart(s);
-
-                    var stream = this.Streams[n];
-                    if (stream == null || stream.Count == 0)
-                    {
-                        // TODO: automatically await
-                        continue;
-                    }
-
-                    var streamVal = stream?.Last?.Value;
-                    if (streamVal == null)
-                    {
-                        // TODO: automatically await
-                        continue;
-                    }
-
-                    var vTime = streamVal.Time;
-                    var vSerie = streamVal.SerieId;
-                    if (vTime < sTime || (vTime == sTime && vSerie < sSerie))
-                    {
-                        // TODO: automatically await
-                        continue;    
-                    }
-                }
-                semaphore.WaitOne();
+                this.XreadBlock(name, start, blockMs);
             }
 
             List<object> streams = [];
