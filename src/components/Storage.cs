@@ -6,8 +6,8 @@ namespace RedisImpl
     {
         public required string Id;
         // Time and SerieId are derivatives of Id, but allow quicker comparison
-        public required int Time;
-        public required int SerieId;
+        public required Int128 Time;
+        public required Int64 SerieId;
         public required List<KeyValPair> KVs;
 
         public List<object> ToList()
@@ -397,13 +397,13 @@ namespace RedisImpl
 
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
             var lastId = stream?.Last?.Value.Id;
-            int? lastT = null;
-            int? lastS = null;
+            Int128? lastT = null;
+            Int64? lastS = null;
             if (lastId != null)
             {
                 var lastTimeAndSerie = lastId.Split("-");
-                lastT = Int32.Parse(lastTimeAndSerie[0]);
-                lastS = Int32.Parse(lastTimeAndSerie[1]);
+                lastT = Int128.Parse(lastTimeAndSerie[0]);
+                lastS = Int64.Parse(lastTimeAndSerie[1]);
             }
 
             if (generateAll)
@@ -418,13 +418,13 @@ namespace RedisImpl
                 }
             }
 
-            var T = Int32.Parse(timeStampAndSerieNumber[0]);
+            var T = Int128.Parse(timeStampAndSerieNumber[0]);
             var S = timeStampAndSerieNumber[1];
             if (lastT > T)
             {
                 return null;
             }
-            if (lastT == T && S != "*" && (Int32.Parse(S) <= lastS))
+            if (lastT == T && S != "*" && (Int64.Parse(S) <= lastS))
             {
                 return null;
             }
@@ -446,8 +446,9 @@ namespace RedisImpl
             {
                 throw new Exception("ERR incorrect id");
             }
-            item.Time = Int32.Parse(tAndS[0]);
-            item.SerieId = Int32.Parse(tAndS[1]);
+
+            item.Time = Int128.Parse(tAndS[0]);
+            item.SerieId = Int64.Parse(tAndS[1]);
 
             // If stream exists, we append, otherwise we create the stream.
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
