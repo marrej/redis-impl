@@ -74,6 +74,7 @@ namespace RedisImpl
         // Stream only props
         readonly Dictionary<string, LinkedList<StreamItem>> Streams = [];
         readonly Dictionary<string, List<Semaphore>> StreamBlocks = [];
+        readonly private Mutex StreamBlockRetrievalMutex = new();
 
         // List Only props
         readonly Dictionary<string, LinkedList<string>> Lists = [];
@@ -460,22 +461,43 @@ namespace RedisImpl
                 Streams[name] = stream;
             }
             stream.AddLast(item);
+
+            DidUpdateStream(name);
             return item.Id;
         }
 
+        private void DidUpdateStream(string name)
+        {
+            StreamBlocks.TryGetValue(name, out List<Semaphore>? semaphores);
+            if (semaphores == null)
+            {
+                return;
+            }
+            StreamBlockRetrievalMutex.WaitOne();
+            StreamBlocks.Remove(name);
+            StreamBlockRetrievalMutex.ReleaseMutex();
+            foreach (var s in semaphores)
+            {
+                s.Release();
+            }
+        }
+
         private void AddStreamBlock(string n, Semaphore s)
-        { 
+        {
+            StreamBlockRetrievalMutex.WaitOne();
             StreamBlocks.TryGetValue(n, out List<Semaphore>? blocks);
             if (blocks == null)
             {
                 StreamBlocks[n] = [];
             }
             StreamBlocks[n].Add(s);
+            StreamBlockRetrievalMutex.ReleaseMutex();
         }
 
         private void XreadBlock(string[] names, string[] starts, int blockMs)
         {
             Semaphore semaphore = new(initialCount: 0, maximumCount: 1);
+            bool blocked = false;
             for (var i = 0; i < names.Length; i++)
             {
                 var n = names[i];
@@ -485,6 +507,7 @@ namespace RedisImpl
                 var stream = this.Streams[n];
                 if (stream == null || stream.Count == 0)
                 {
+                    blocked = true;
                     this.AddStreamBlock(n, semaphore);
                     continue;
                 }
@@ -492,6 +515,7 @@ namespace RedisImpl
                 var streamVal = stream?.Last?.Value;
                 if (streamVal == null)
                 {
+                    blocked = true;
                     this.AddStreamBlock(n, semaphore);
                     continue;
                 }
@@ -503,7 +527,14 @@ namespace RedisImpl
                     // Don't add the semaphore in case there are already values
                     continue;
                 }
+                blocked = true;
                 this.AddStreamBlock(n, semaphore);
+            }
+
+            // Don't await if there isn't a need to block.
+            if (!blocked)
+            {
+                return;
             }
             
             Timer? timer = null;
