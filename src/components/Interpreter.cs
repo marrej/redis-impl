@@ -250,19 +250,19 @@ namespace RedisImpl
             {
                 return Types.GetSimpleString("string");
             }
-            Console.WriteLine("Access");
+
             var hasList = this.Storage.HasList(property);
             if (hasList)
             {
                 return Types.GetSimpleString("list");
             }
-            Console.WriteLine("bubo");
+
             var hasStream = this.Storage.HasStream(property);
             if (hasStream)
             {
                 return Types.GetSimpleString("stream");
             }
-            Console.WriteLine("buba");
+
             return Types.GetSimpleString("none");
         }
 

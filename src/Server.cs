@@ -50,7 +50,7 @@ void ThreadLoop(object data)
         {
             var p = c.Parser.Parse(message);
             var i = interpreter.Interpret(p);
-            Console.WriteLine(i);
+
             // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
             var response = Encoding.ASCII.GetBytes(i);
             c.Socket.Send(response);
