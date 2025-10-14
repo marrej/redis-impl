@@ -13,7 +13,8 @@ namespace RedisImpl
         public List<object> ToList()
         {
             List<string> kvList = [];
-            foreach (var kv in KVs) {
+            foreach (var kv in KVs)
+            {
                 kvList.Add(kv.Key);
                 kvList.Add(kv.Val);
             }
@@ -461,7 +462,27 @@ namespace RedisImpl
             return item.Id;
         }
 
-        public List<object>? Xrange(string name, string start, string end)
+        public List<object>? Xread(string[] name, string[] start)
+        {
+            if (name.Length != start.Length)
+            {
+                throw new Exception("ERR Keys don't align with start ids");
+            }
+            List<object> streams = [];
+            for (var i = 0; i < name.Length; i++)
+            {
+                var stream = this.Xrange(name[i], start[i], "+");
+                if (stream == null)
+                {
+                    continue;
+                }
+
+                streams.Add(new List<object> { name[i], stream });
+            }
+            return streams;
+        }
+
+        public List<object>? Xrange(string name, string start, string end, bool startInclusive = false)
         {
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
             if (stream == null)
@@ -480,7 +501,8 @@ namespace RedisImpl
             foreach (var v in stream)
             {
                 var afterStart = v.Time > sTime;
-                var atTimeStart = v.Time == sTime && v.SerieId >= sSerie;
+                // startInclusive means that when the timestamp == start, then serieId needs to be bigger.
+                var atTimeStart = v.Time == sTime && (startInclusive ? v.SerieId >= sSerie : v.SerieId > sSerie);
 
                 var beforeEnd = v.Time < eTime;
                 var atTimeEnd = v.Time == eTime && v.SerieId <= eSerie;

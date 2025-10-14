@@ -28,6 +28,7 @@ namespace RedisImpl
                 // Stream actions
                 "XADD" => this.Xadd(arguments),
                 "XRANGE" => this.XRange(arguments),
+                "XREAD" => this.XRead(arguments),
                 _ => Types.GetSimpleString("ERROR no command specified"),
             };
         }
@@ -297,7 +298,7 @@ namespace RedisImpl
             }
         }
 
-        // https://redis.io/docs/latest/commands/xadd/
+        // https://redis.io/docs/latest/commands/xrange/
         public string XRange(List<string> arguments)
         {
             if (arguments.Count != 3)
@@ -308,6 +309,19 @@ namespace RedisImpl
             var start = arguments[1];
             var end = arguments[2];
             return Types.GetArray(this.Storage.Xrange(stream, start, end));
+        }
+
+        // https://redis.io/docs/latest/commands/xread
+        public string XRead(List<string> arguments)
+        {
+            if ((arguments.Count % 2) > 0)
+            {
+                return Types.GetSimpleError("ERR incorrect param count");
+            }
+            var midpoint = arguments.Count/2;
+            var streams = arguments[0..midpoint].ToArray();
+            var starts = arguments[midpoint..].ToArray();
+            return Types.GetArray(this.Storage.Xread(streams, starts));
         }
     }
 }
