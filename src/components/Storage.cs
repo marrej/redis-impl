@@ -471,7 +471,7 @@ namespace RedisImpl
             List<object> streams = [];
             for (var i = 0; i < name.Length; i++)
             {
-                var stream = this.Xrange(name[i], start[i], "+");
+                var stream = this.Xrange(name[i], start[i], "+", false);
                 if (stream == null)
                 {
                     continue;
@@ -482,7 +482,7 @@ namespace RedisImpl
             return streams;
         }
 
-        public List<object>? Xrange(string name, string start, string end, bool startInclusive = false)
+        public List<object>? Xrange(string name, string start, string end, bool startInclusive = true)
         {
             Streams.TryGetValue(name, out LinkedList<StreamItem>? stream);
             if (stream == null)

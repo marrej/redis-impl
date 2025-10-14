@@ -314,12 +314,17 @@ namespace RedisImpl
         // https://redis.io/docs/latest/commands/xread
         public string XRead(List<string> arguments)
         {
-            if ((arguments.Count % 2) > 0)
+            if ((arguments.Count % 2) != 1)
             {
                 return Types.GetSimpleError("ERR incorrect param count");
             }
-            var midpoint = arguments.Count/2;
-            var streams = arguments[0..midpoint].ToArray();
+            // Ignores the "streams" keyword which is used as separator
+            if (arguments[0] != "streams")
+            { 
+                return Types.GetSimpleError("ERR missing STREAMS param");
+            }
+            var midpoint = ((arguments.Count-1)/2)+1;
+            var streams = arguments[1..midpoint].ToArray();
             var starts = arguments[midpoint..].ToArray();
             return Types.GetArray(this.Storage.Xread(streams, starts));
         }
