@@ -559,7 +559,7 @@ namespace RedisImpl
                 throw new Exception("ERR Keys don't align with start ids");
             }
 
-            if (blockMs > 0)
+            if (blockMs >= 0)
             {
                 this.XreadBlock(name, start, blockMs);
             }
