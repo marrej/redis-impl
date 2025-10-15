@@ -494,15 +494,18 @@ namespace RedisImpl
             StreamBlockRetrievalMutex.ReleaseMutex();
         }
 
-        private void XreadBlock(string[] names, string[] starts, int blockMs)
+        // Returns the start points to be used by the stream on new values added
+        // on "$" uses the last point before unblocking as start point
+        private string[] XreadBlock(string[] names, string[] starts, int blockMs)
         {
             Semaphore semaphore = new(initialCount: 0, maximumCount: 1);
             bool blocked = false;
+            var updatedStarts = starts;
+
             for (var i = 0; i < names.Length; i++)
             {
                 var n = names[i];
                 var s = starts[i];
-                var (sTime, sSerie) = GetStreamStart(s);
 
                 var stream = this.Streams[n];
                 if (stream == null || stream.Count == 0)
@@ -522,6 +525,16 @@ namespace RedisImpl
 
                 var vTime = streamVal.Time;
                 var vSerie = streamVal.SerieId;
+
+                if (s == "$")
+                {
+                    // Wants only new additions
+                    blocked = true;
+                    this.AddStreamBlock(n, semaphore);
+                    updatedStarts[i] = streamVal.Id;
+                    continue;
+                }
+                var (sTime, sSerie) = GetStreamStart(s);
                 if (vTime > sTime || (vTime == sTime && vSerie > sSerie))
                 {
                     // Don't add the semaphore in case there are already values
@@ -534,9 +547,9 @@ namespace RedisImpl
             // Don't await if there isn't a need to block.
             if (!blocked)
             {
-                return;
+                return updatedStarts;
             }
-            
+
             Timer? timer = null;
             if (blockMs > 0)
             {
@@ -550,6 +563,7 @@ namespace RedisImpl
             }
 
             semaphore.WaitOne();
+            return updatedStarts;
         }
 
         public List<object>? Xread(string[] name, string[] start, int blockMs)
@@ -559,15 +573,16 @@ namespace RedisImpl
                 throw new Exception("ERR Keys don't align with start ids");
             }
 
+            string[] updatedStarts = start;
             if (blockMs >= 0)
             {
-                this.XreadBlock(name, start, blockMs);
+                updatedStarts = this.XreadBlock(name, start, blockMs);
             }
 
             List<object> streams = [];
             for (var i = 0; i < name.Length; i++)
             {
-                var stream = this.Xrange(name[i], start[i], "+", /*startInclusive=*/false);
+                var stream = this.Xrange(name[i], updatedStarts[i], "+", /*startInclusive=*/false);
                 if (stream == null || stream.Count == 0)
                 {
                     return null;
