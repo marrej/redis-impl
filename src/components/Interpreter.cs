@@ -1,19 +1,37 @@
 namespace RedisImpl
 {
+    class CommandItem
+    {
+        public required string Command;
+
+        public required List<string> Arguments;
+    }
     class Interpreter
     {
         required public Storage Storage;
         // Id of the current thread.
         required public int Id;
-        public string Interpret(List<string> p)
+
+        private List<CommandItem>? CommandQueue = null;
+        public string Execute(List<string> p)
         {
             var command = p.Count > 0 ? p[0] : "ERROR";
             var arguments = p.Count > 1 ? p[1..] : [];
+            // Enqueue commands if queue exists
+            if (command != "EXEC" && CommandQueue != null)
+            {
+                this.CommandQueue.Add(new CommandItem { Command = command, Arguments = arguments });
+                return Types.GetSimpleString("QUEUED");
+            }
+
+            // Invariant: directly executing commands
             try
             {
                 return command.ToUpper() switch
                 {
-                    // TODO: refactor. Instead of returning direct value, after interpretation, this should just return a Command object that we can execute in some way?
+                    // Queue commands
+                    "MULTI" => this.Multi(),
+                    // Debugging commands
                     "PING" => Types.GetSimpleString("PONG"),
                     "ECHO" => this.Echo(arguments),
                     "TYPE" => this.Type(arguments),
@@ -39,6 +57,12 @@ namespace RedisImpl
             {
                 return Types.GetSimpleError(e.Message);
             }
+        }
+
+        public string Multi()
+        {
+            this.CommandQueue = [];
+            return Types.GetSimpleString("OK");
         }
 
         public string Echo(List<string> arguments)
@@ -351,7 +375,7 @@ namespace RedisImpl
             }
             // Shift the start & midpoint if there is block param.
             var startOffset = startArg + 1;
-            var midpoint = ((arguments.Count-startOffset)/2)+startOffset;
+            var midpoint = ((arguments.Count - startOffset) / 2) + startOffset;
 
             var streams = arguments[startOffset..midpoint].ToArray();
             var starts = arguments[midpoint..].ToArray();

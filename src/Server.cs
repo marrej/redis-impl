@@ -49,7 +49,7 @@ void ThreadLoop(object data)
         try
         {
             var p = c.Parser.Parse(message);
-            var i = interpreter.Interpret(p);
+            var i = interpreter.Execute(p);
 
             // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
             var response = Encoding.ASCII.GetBytes(i);
