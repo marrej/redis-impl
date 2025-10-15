@@ -9,28 +9,36 @@ namespace RedisImpl
         {
             var command = p.Count > 0 ? p[0] : "ERROR";
             var arguments = p.Count > 1 ? p[1..] : [];
-            return command.ToUpper() switch
+            try
             {
-                // TODO: refactor. Instead of returning direct value, after interpretation, this should just return a Command object that we can execute in some way?
-                "PING" => Types.GetSimpleString("PONG"),
-                "ECHO" => this.Echo(arguments),
-                "TYPE" => this.Type(arguments),
-                // Item actions
-                "GET" => this.Get(arguments),
-                "SET" => this.Set(arguments),
-                // List actions
-                "RPUSH" => this.Rpush(arguments),
-                "LRANGE" => this.Lrange(arguments),
-                "LPUSH" => this.Lpush(arguments),
-                "LLEN" => this.Llen(arguments),
-                "LPOP" => this.Lpop(arguments),
-                "BLPOP" => this.Blpop(arguments),
-                // Stream actions
-                "XADD" => this.Xadd(arguments),
-                "XRANGE" => this.XRange(arguments),
-                "XREAD" => this.XRead(arguments),
-                _ => Types.GetSimpleString("ERROR no command specified"),
-            };
+                return command.ToUpper() switch
+                {
+                    // TODO: refactor. Instead of returning direct value, after interpretation, this should just return a Command object that we can execute in some way?
+                    "PING" => Types.GetSimpleString("PONG"),
+                    "ECHO" => this.Echo(arguments),
+                    "TYPE" => this.Type(arguments),
+                    // Item actions
+                    "GET" => this.Get(arguments),
+                    "SET" => this.Set(arguments),
+                    "INCR" => this.Incr(arguments),
+                    // List actions
+                    "RPUSH" => this.Rpush(arguments),
+                    "LRANGE" => this.Lrange(arguments),
+                    "LPUSH" => this.Lpush(arguments),
+                    "LLEN" => this.Llen(arguments),
+                    "LPOP" => this.Lpop(arguments),
+                    "BLPOP" => this.Blpop(arguments),
+                    // Stream actions
+                    "XADD" => this.Xadd(arguments),
+                    "XRANGE" => this.XRange(arguments),
+                    "XREAD" => this.XRead(arguments),
+                    _ => Types.GetSimpleString("ERROR no command specified"),
+                };
+            }
+            catch (Exception e)
+            {
+                return Types.GetSimpleError(e.Message);
+            }
         }
 
         public string Echo(List<string> arguments)
@@ -38,8 +46,19 @@ namespace RedisImpl
             return Types.GetBulkString(arguments);
         }
 
+        // https://redis.io/docs/latest/commands/incr
+        public string Incr(List<string> arguments)
+        {
+            if (arguments.Count < 1)
+            {
+                return Types.GetSimpleError("ERROR invalid parameter count");
+            }
+            var key = arguments[0];
+            return Types.GetInteger64(this.Storage.Incr(key));
+        }
 
-        // https://redis.io/docs/latest/commands/set/#options
+
+        // https://redis.io/docs/latest/commands/set
         public string Set(List<string> arguments)
         {
             if (arguments.Count < 2)

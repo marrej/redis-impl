@@ -47,6 +47,11 @@ namespace RedisImpl
         {
             return ":" + input.ToString() + "\r\n";
         }
+        public static string GetInteger64(Int64 input)
+        {
+            return ":" + input.ToString() + "\r\n";
+        }
+        
 
         // https://redis.io/docs/latest/develop/reference/protocol-spec/#arrays
         public static string GetStringArray(List<string>? inputs)

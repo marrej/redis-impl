@@ -220,6 +220,31 @@ namespace RedisImpl
             }
         }
 
+        // Increments existing values if parseable as int.
+        // If nonexistent starts at 1 
+        // otherwise throws error.
+        public Int64 Incr(string name)
+        {
+            this.EvaluateTTL(name);
+            KeyVals.TryGetValue(name, out string? val);
+            if (val == null)
+            {
+                val = "0";
+                KeyVals[name] = val;
+            }
+            try
+            {
+                var parsed = Int64.Parse(val);
+                parsed++;
+                KeyVals[name] = parsed.ToString();
+                return parsed;
+            }
+            catch (Exception)
+            {
+                throw new Exception("ERR trying to increment a string");
+            }
+        }
+
         public int Rpush(string list, string input)
         {
             if (!Lists.ContainsKey(list))
