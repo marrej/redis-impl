@@ -241,7 +241,7 @@ namespace RedisImpl
             }
             catch (Exception)
             {
-                throw new Exception("ERR trying to increment a string");
+                throw new Exception("ERR value is not an integer or out of range");
             }
         }
 
