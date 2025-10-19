@@ -18,19 +18,25 @@ namespace RedisImpl
             var command = p.Count > 0 ? p[0] : "ERROR";
             var arguments = p.Count > 1 ? p[1..] : [];
             // Enqueue commands if queue exists
-            if (command != "EXEC" && CommandQueue != null)
+            if (command.ToUpper() != "EXEC" && CommandQueue != null)
             {
                 this.CommandQueue.Add(new CommandItem { Command = command, Arguments = arguments });
                 return Types.GetSimpleString("QUEUED");
             }
 
             // Invariant: directly executing commands
+            return this.ExecCmd(command, arguments);
+        }
+
+        private string ExecCmd(string command, List<string> arguments)
+        {
             try
             {
                 return command.ToUpper() switch
                 {
                     // Queue commands
                     "MULTI" => this.Multi(),
+                    "EXEC" => this.Exec(),
                     // Debugging commands
                     "PING" => Types.GetSimpleString("PONG"),
                     "ECHO" => this.Echo(arguments),
@@ -65,6 +71,22 @@ namespace RedisImpl
             return Types.GetSimpleString("OK");
         }
 
+        public string Exec()
+        {
+            if (this.CommandQueue == null)
+            {
+                throw new Exception("ERR EXEC without MULTI");
+            }
+            List<string> results = [];
+            foreach (var cmd in this.CommandQueue)
+            {
+                results.Add(this.ExecCmd(cmd.Command, cmd.Arguments));
+            }
+            this.CommandQueue = null;
+
+            return Types.GetStringArray(results);
+        }
+
         public string Echo(List<string> arguments)
         {
             return Types.GetBulkString(arguments);
@@ -87,7 +109,7 @@ namespace RedisImpl
         {
             if (arguments.Count < 2)
             {
-                return Types.GetSimpleString("ERROR invalid parameter count");
+                return Types.GetSimpleError("ERROR invalid parameter count");
             }
             var key = arguments[0];
             var val = arguments[1];
@@ -114,12 +136,12 @@ namespace RedisImpl
                     case "PXAT":
                         if (measurement != null)
                         {
-                            return Types.GetSimpleString("ERROR ttl already set");
+                            return Types.GetSimpleError("ERROR ttl already set");
                         }
                         measurement = command;
                         if (arguments.Count < i + 1)
                         {
-                            return Types.GetSimpleString("ERROR missing time variable");
+                            return Types.GetSimpleError("ERROR missing time variable");
                         }
                         time = int.Parse(arguments[i + 1]);
                         i++;
@@ -127,7 +149,7 @@ namespace RedisImpl
                     case "KEEPTTL":
                         if (measurement != null)
                         {
-                            return Types.GetSimpleString("ERROR ttl already set");
+                            return Types.GetSimpleError("ERROR ttl already set");
                         }
                         measurement = command;
                         break;
@@ -163,7 +185,7 @@ namespace RedisImpl
             }
             catch (Exception)
             {
-                return Types.GetSimpleString("ERROR setting val");
+                return Types.GetSimpleError("ERROR setting val");
             }
         }
 
@@ -171,22 +193,18 @@ namespace RedisImpl
         {
             if (arguments.Count < 1)
             {
-                return Types.GetSimpleString("ERROR missing key");
+                return Types.GetSimpleError("ERROR missing key");
             }
 
             var val = this.Storage.Get(arguments[0]);
-            if (val == null)
-            {
-                return Types.GetBulkString(null);
-            }
-            return Types.GetBulkString([val]);
+            return Types.GetBulkString(val == null ? null : [val]);
         }
 
         public string Rpush(List<string> arguments)
         {
             if (arguments.Count < 2)
             {
-                return Types.GetSimpleString("ERROR invalida arg count");
+                return Types.GetSimpleError("ERROR invalida arg count");
             }
             var listLength = 0;
             var list = arguments[0];
@@ -205,7 +223,7 @@ namespace RedisImpl
         {
             if (arguments.Count < 2)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
             var list = arguments[0];
             var items = arguments[1..];
@@ -220,7 +238,7 @@ namespace RedisImpl
         {
             if (arguments.Count != 3)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
 
             // INVARIANT: all args are provided
@@ -235,7 +253,7 @@ namespace RedisImpl
         {
             if (arguments.Count != 1)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
             return Types.GetInteger(Storage.Llen(arguments[0]));
         }
@@ -245,7 +263,7 @@ namespace RedisImpl
         {
             if (arguments.Count < 2)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
             // BLPOP key [key ...] timeout
             var lists = arguments[0..(arguments.Count - 1)];
@@ -259,7 +277,7 @@ namespace RedisImpl
         {
             if (arguments.Count < 1)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
             var list = arguments[0];
 
@@ -282,7 +300,7 @@ namespace RedisImpl
         {
             if (arguments.Count != 1)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
             var property = arguments[0];
 
@@ -314,7 +332,7 @@ namespace RedisImpl
         {
             if (arguments.Count < 4)
             {
-                return Types.GetSimpleString("ERROR incorrect argument count");
+                return Types.GetSimpleError("ERROR incorrect argument count");
             }
             var streamName = arguments[0];
             // We are currently ignoring all modifiers
