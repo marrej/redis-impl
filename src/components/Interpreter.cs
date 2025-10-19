@@ -84,7 +84,7 @@ namespace RedisImpl
             }
             this.CommandQueue = null;
 
-            return Types.GetStringArray(results);
+            return Types.GetStringArray(results, /*useEncodedString=*/ true);
         }
 
         public string Echo(List<string> arguments)

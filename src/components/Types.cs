@@ -54,7 +54,7 @@ namespace RedisImpl
         
 
         // https://redis.io/docs/latest/develop/reference/protocol-spec/#arrays
-        public static string GetStringArray(List<string>? inputs)
+        public static string GetStringArray(List<string>? inputs, bool useEncodedStrings = false)
         {
             if (inputs == null)
             {
@@ -63,7 +63,7 @@ namespace RedisImpl
             var ret = "*" + inputs.Count.ToString() + "\r\n";
             for (var i = 0; i < inputs.Count; i++)
             {
-                ret += Types.GetBulkString([inputs[i]]);
+                ret += useEncodedStrings ? inputs[i] : Types.GetBulkString([inputs[i]]);
             }
             return ret;
         }
