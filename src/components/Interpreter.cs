@@ -18,7 +18,7 @@ namespace RedisImpl
             var command = p.Count > 0 ? p[0] : "ERROR";
             var arguments = p.Count > 1 ? p[1..] : [];
             // Enqueue commands if queue exists
-            if (command.ToUpper() != "EXEC" && CommandQueue != null)
+            if (command.ToUpper() != "EXEC" && command.ToUpper() != "DISCARD" && CommandQueue != null)
             {
                 this.CommandQueue.Add(new CommandItem { Command = command, Arguments = arguments });
                 return Types.GetSimpleString("QUEUED");
@@ -37,6 +37,7 @@ namespace RedisImpl
                     // Queue commands
                     "MULTI" => this.Multi(),
                     "EXEC" => this.Exec(),
+                    "DISCARD" => this.Discard(),
                     // Debugging commands
                     "PING" => Types.GetSimpleString("PONG"),
                     "ECHO" => this.Echo(arguments),
@@ -68,6 +69,16 @@ namespace RedisImpl
         public string Multi()
         {
             this.CommandQueue = [];
+            return Types.GetSimpleString("OK");
+        }
+
+        public string Discard()
+        {
+            if (this.CommandQueue == null)
+            {
+                return Types.GetSimpleError("ERR DISCARD without MULTI");
+            }
+            this.CommandQueue = null;
             return Types.GetSimpleString("OK");
         }
 
