@@ -6,63 +6,91 @@ using System.Text.Json;
 using System.Threading;
 using RedisImpl;
 
-// We can test the connection using netcat, e.g. `echo "foo" | nc localhost 6379`
-// Or better `echo -e "PING\nPING" | redis-cli`
-
-Console.WriteLine("Server Starting");
-
-TcpListener server = new(IPAddress.Any, 6379);
-server.Start();
-Storage storage = new();
-Parser parser = new();
-Console.WriteLine("Accepting at 6379");
-
-// A communication loop listenting to socket exchanges
-var id = 0;
-while (true)
+class Redis
 {
-    Socket socket = server.AcceptSocket(); // wait for client
-    Console.WriteLine("Client connected"); // Accepts a socket to connect
-    // Resolves all commands sent from the socket in succession
-
-    Thread conn = new Thread(ThreadLoop);
-    conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage });
-    id++;
-}
-
-void ThreadLoop(object data)
-{
-    CliInput c = (CliInput)data;
-    Console.WriteLine("Connected thread {0}", c.Id);
-    Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id };
-
-    while (true)
+    public static void Main(string[] args)
     {
-        byte[] buffer = new byte[1024];
-        var bytes = c.Socket.Receive(buffer);
-        // Disconnect if no more requests are received (the client errors out)
-        if (bytes == 0)
-        {
-            break;
-        }
-        var message = Encoding.ASCII.GetString(buffer);
-        try
-        {
-            var p = c.Parser.Parse(message);
-            var i = interpreter.Execute(p);
+        StartupFlags flags = Redis.GetFlags(args);
 
-            // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
-            var response = Encoding.ASCII.GetBytes(i);
-            c.Socket.Send(response);
-            Console.WriteLine("Response Sent");
-        }
-        catch (Exception e)
+        // We can test the connection using netcat, e.g. `echo "foo" | nc localhost 6379`
+        // Or better `echo -e "PING\nPING" | redis-cli`
+        Console.WriteLine("Server Starting");
+
+        var activePort = flags.Port ?? 6379;
+        TcpListener server = new(IPAddress.Any, activePort);
+        server.Start();
+        Storage storage = new();
+        Parser parser = new();
+        Console.WriteLine("Accepting at " + activePort);
+
+        // A communication loop listenting to socket exchanges
+        var id = 0;
+        while (true)
         {
-            var r = Encoding.ASCII.GetBytes(Types.GetSimpleString("ERROR didn't parse correctly"));
-            c.Socket.Send(r);
-            continue;
+            Socket socket = server.AcceptSocket(); // wait for client
+            Console.WriteLine("Client connected"); // Accepts a socket to connect
+                                                   // Resolves all commands sent from the socket in succession
+
+            Thread conn = new Thread(ThreadLoop);
+            conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage });
+            id++;
         }
     }
+
+    public static StartupFlags GetFlags(string[] args)
+    {
+        StartupFlags flags = new();
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--port" && args.Length - 1 >= i + 1)
+            {
+                i++;
+                flags.Port = Int32.Parse(args[i]);
+            }
+        }
+        return flags;
+    }
+
+
+    public static void ThreadLoop(object data)
+    {
+        CliInput c = (CliInput)data;
+        Console.WriteLine("Connected thread {0}", c.Id);
+        Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id };
+
+        while (true)
+        {
+            byte[] buffer = new byte[1024];
+            var bytes = c.Socket.Receive(buffer);
+            // Disconnect if no more requests are received (the client errors out)
+            if (bytes == 0)
+            {
+                break;
+            }
+            var message = Encoding.ASCII.GetString(buffer);
+            try
+            {
+                var p = c.Parser.Parse(message);
+                var i = interpreter.Execute(p);
+
+                // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
+                var response = Encoding.ASCII.GetBytes(i);
+                c.Socket.Send(response);
+                Console.WriteLine("Response Sent");
+            }
+            catch (Exception e)
+            {
+                var r = Encoding.ASCII.GetBytes(Types.GetSimpleString("ERROR didn't parse correctly"));
+                c.Socket.Send(r);
+                continue;
+            }
+        }
+    }
+}
+
+class StartupFlags
+{
+    public int? Port;
 }
 
 class CliInput
