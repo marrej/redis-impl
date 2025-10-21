@@ -1,3 +1,5 @@
+using System.Buffers.Text;
+
 namespace RedisImpl
 {
     class CommandItem
@@ -13,7 +15,14 @@ namespace RedisImpl
         required public Storage Storage;
         required public MasterReplicaBridge Bridge;
 
+        // If set to true, starts the replication process on bridge after the original command is finished.
+        public bool StartReplication = false;
+
         private List<CommandItem>? CommandQueue = null;
+
+        // New replica connection that is being established.
+        // The data is stored here only until handshake is reached. A new replconf would invalidate this.
+        public ReplicaConn? NewReplica;
         public string Execute(List<string> p)
         {
             var command = p.Count > 0 ? p[0] : "ERROR";
@@ -73,11 +82,27 @@ namespace RedisImpl
 
         public string Psync(List<string> arguments)
         {
+            if (arguments.Count < 2)
+            {
+                return Types.GetSimpleError("ERROR invalid parameter count");
+            }
+            if (this.NewReplica == null)
+            { 
+                return Types.GetSimpleError("ERR replica not initialized");
+            }
+            this.NewReplica.MasterReplId = arguments[0];
+            this.NewReplica.ConsumedBytes = Int128.Parse(arguments[1]);
+            this.Bridge.AddReplica(this.NewReplica);
+            this.StartReplication = true;
             return Types.GetSimpleString("FULLRESYNC " + this.Bridge.ReplId + " " + this.Bridge.ProducedBytes.ToString());
         }
 
         public string Replconf(List<string> arguments)
         {
+            if (arguments.Count > 1 && arguments[0] == "listening-port")
+            {
+                this.NewReplica = new ReplicaConn { Port = Int32.Parse(arguments[1])};
+            }
             // Currently automatically responds happily everytime;
             // TODO: But should also set the port of the follower
             return Types.GetSimpleString("OK");

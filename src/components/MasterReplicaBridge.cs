@@ -6,6 +6,7 @@ using RedisImpl;
 
 class MasterReplicaBridge
 {
+    private Dictionary<Int128, ReplicaConn> Replicas = new();
     public bool IsMaster = false;
 
     // Data set only if the node is Master;
@@ -30,7 +31,7 @@ class MasterReplicaBridge
             this.IsMaster = true;
             this.ProducedBytes = 0;
             // Extend by "repl" - so that the length is 40 per requirement
-            this.ReplId = System.Guid.NewGuid().ToString().Replace("-","X") + "repl";
+            this.ReplId = System.Guid.NewGuid().ToString().Replace("-", "X") + "repl";
         }
         else
         {
@@ -62,7 +63,14 @@ class MasterReplicaBridge
             byte[] buffer = new byte[1024];
             stream.Socket.Receive(buffer);
             var message = Encoding.ASCII.GetString(buffer);
+
             Console.WriteLine(message);
+            if (r[0] != "PSYNC" && !message.StartsWith("+FULLRESYNC"))
+            {
+                continue;
+            }
+            // TODO: parse the resync response
+            // TODO: at this point stop the connection and wait for the Master to connect and to send data ourway.
         }
     }
 
@@ -73,10 +81,37 @@ class MasterReplicaBridge
         var replOffset = "master_repl_offset:" + this.ProducedBytes.ToString();
         return role + "\n" + replId + "\n" + replOffset + "\n";
     }
+
+    public void AddReplica(ReplicaConn r)
+    {
+        this.Replicas[r.Port] = r;
+    }
+
+    public void StartReplication(ReplicaConn? conn)
+    {
+        if (conn == null)
+        {
+            throw new Exception("ERR Replica not available");
+        }
+        var emptyBase64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
+        var buf = Convert.FromBase64String(emptyBase64);
+        // Using a new client send
+        var res = "$0\r\n" + System.Text.Encoding.Default.GetString(buf);
+        Console.WriteLine(res);
+    }
 }
 
 class MasterInfo
 {
     required public string Ip;
     required public int Port;
+}
+
+class ReplicaConn
+{
+    required public int Port;
+
+    public string? MasterReplId;
+    // The last consumed offset from the Master command stream
+    public Int128 ConsumedBytes = -1;
 }

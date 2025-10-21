@@ -19,10 +19,10 @@ class Redis
         var activePort = flags.Port ?? 6379;
         TcpListener server = new(IPAddress.Any, activePort);
         server.Start();
-        var bridge = new MasterReplicaBridge { Port = activePort };
-        bridge.SetRole(flags.Master);
         Storage storage = new();
         Parser parser = new();
+        var bridge = new MasterReplicaBridge { Port = activePort};
+        bridge.SetRole(flags.Master);
         Console.WriteLine("Accepting at " + activePort);
 
         // A communication loop listenting to socket exchanges
@@ -83,11 +83,15 @@ class Redis
             {
                 var p = c.Parser.Parse(message);
                 var i = interpreter.Execute(p);
-
                 // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
                 var response = Encoding.ASCII.GetBytes(i);
                 c.Socket.Send(response);
                 Console.WriteLine("Response Sent");
+                if (interpreter.StartReplication)
+                {
+                    Console.WriteLine("starting replication");
+                    c.Bridge.StartReplication(interpreter.NewReplica);
+                }
             }
             catch (Exception e)
             {
