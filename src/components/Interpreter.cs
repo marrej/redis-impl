@@ -34,6 +34,8 @@ namespace RedisImpl
             {
                 return command.ToUpper() switch
                 {
+                    // Redis info
+                    "INFO" => this.Info(arguments),
                     // Queue commands
                     "MULTI" => this.Multi(),
                     "EXEC" => this.Exec(),
@@ -64,6 +66,25 @@ namespace RedisImpl
             {
                 return Types.GetSimpleError(e.Message);
             }
+        }
+
+        public string Info(List<string> arguments)
+        {
+            HashSet<string> selection = arguments.Count == 0 ? ["all"] : arguments.ToHashSet();
+
+            List<string> infoKeyVals = [];
+            foreach (var s in selection)
+            {
+                switch (s)
+                {
+                    case "all":
+                    case "replication":
+                    default:
+                        infoKeyVals.Add("role:" + "master");
+                        break;
+                }
+            }
+            return Types.GetBulkString(infoKeyVals);
         }
 
         public string Multi()
