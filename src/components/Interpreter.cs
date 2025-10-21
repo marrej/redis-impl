@@ -12,6 +12,8 @@ namespace RedisImpl
         // Id of the current thread.
         required public int Id;
 
+        required public bool IsMaster;
+
         private List<CommandItem>? CommandQueue = null;
         public string Execute(List<string> p)
         {
@@ -80,7 +82,7 @@ namespace RedisImpl
                     case "all":
                     case "replication":
                     default:
-                        infoKeyVals.Add("role:" + "master");
+                        infoKeyVals.Add("role:" + (this.IsMaster ? "master" : "slave"));
                         break;
                 }
             }

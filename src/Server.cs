@@ -32,7 +32,7 @@ class Redis
                                                    // Resolves all commands sent from the socket in succession
 
             Thread conn = new Thread(ThreadLoop);
-            conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage });
+            conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage, Flags = flags });
             id++;
         }
     }
@@ -47,6 +47,15 @@ class Redis
                 i++;
                 flags.Port = Int32.Parse(args[i]);
             }
+            else if (args[i] == "--replicaof" && args.Length - 1 >= i + 1)
+            {
+                i++;
+                var conn = args[i].Split(" ");
+                if (conn.Length != 2) {
+                    throw new Exception("Invalid conn string");
+                }
+                flags.Master = new MasterInfo { Ip = conn[0], Port = conn[1] };
+            }
         }
         return flags;
     }
@@ -56,7 +65,7 @@ class Redis
     {
         CliInput c = (CliInput)data;
         Console.WriteLine("Connected thread {0}", c.Id);
-        Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id };
+        Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id, IsMaster = (c?.Flags?.Master == null) };
 
         while (true)
         {
@@ -91,6 +100,14 @@ class Redis
 class StartupFlags
 {
     public int? Port;
+
+    public MasterInfo? Master;
+}
+
+class MasterInfo
+{
+    required public string Ip;
+    required public string Port; 
 }
 
 class CliInput
@@ -100,5 +117,7 @@ class CliInput
 
     required public Parser Parser { get; set; }
     required public Storage Storage { get; set; }
+
+    required public StartupFlags? Flags;
 }
 
