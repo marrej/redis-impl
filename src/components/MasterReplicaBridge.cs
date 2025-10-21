@@ -30,7 +30,7 @@ class MasterReplicaBridge
             this.IsMaster = true;
             this.ProducedBytes = 0;
             // Extend by "repl" - so that the length is 40 per requirement
-            this.ReplId = System.Guid.NewGuid().ToString() + "repl";
+            this.ReplId = System.Guid.NewGuid().ToString().Replace("-","X") + "repl";
         }
         else
         {
