@@ -19,7 +19,7 @@ class Redis
         var activePort = flags.Port ?? 6379;
         TcpListener server = new(IPAddress.Any, activePort);
         server.Start();
-        MasterReplicaBridge bridge = new();
+        var bridge = new MasterReplicaBridge { Port = activePort };
         bridge.SetRole(flags.Master);
         Storage storage = new();
         Parser parser = new();

@@ -37,6 +37,7 @@ namespace RedisImpl
                 {
                     // Redis info
                     "INFO" => this.Info(arguments),
+                    "REPLCONF" => this.Replconf(arguments),
                     // Queue commands
                     "MULTI" => this.Multi(),
                     "EXEC" => this.Exec(),
@@ -67,6 +68,13 @@ namespace RedisImpl
             {
                 return Types.GetSimpleError(e.Message);
             }
+        }
+
+        public string Replconf(List<string> arguments)
+        {
+            // Currently automatically responds happily everytime;
+            // TODO: But should also set the port of the follower
+            return Types.GetSimpleString("OK");
         }
 
         public string Info(List<string> arguments)

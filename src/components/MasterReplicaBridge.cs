@@ -15,6 +15,8 @@ class MasterReplicaBridge
 
     private MasterInfo? MasterConn;
 
+    public int Port;
+
     public void SetRole(MasterInfo? info)
     {
         if (info == null)
@@ -39,17 +41,16 @@ class MasterReplicaBridge
         client.Connect(info.Ip, info.Port);
 
         var stream = client.GetStream();
+        List<List<string>> reqs = [["PING"], ["REPLCONF","listening-port", this.Port.ToString()], ["REPLCONF","capa", "psync2"]];
         // Initiate connection - first just by sending Ping and then breaking the socket.
-        while (true)
-        {
-            byte[] sendBuffer = Encoding.UTF8.GetBytes(Types.GetStringArray(["PING"]));
+        foreach (var r in reqs) {
+            byte[] sendBuffer = Encoding.UTF8.GetBytes(Types.GetStringArray(r));
             stream.Write(sendBuffer);
 
             byte[] buffer = new byte[1024];
             stream.Socket.Receive(buffer);
             var message = Encoding.ASCII.GetString(buffer);
             Console.WriteLine(message);
-            break;
         }
     }
 
