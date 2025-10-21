@@ -19,6 +19,9 @@ class MasterReplicaBridge
 
     public string GetReplicaInfo()
     {
-        return "role:" + (this.IsMaster ? "master" : "slave") + "\n" + "master_replid:" + this.ReplId + "\n" + "master_repl_offset:" + this.ProcessedBytes.ToString() + "\n";
+        var role = "role:" + (this.IsMaster ? "master" : "slave");
+        var replId = "master_replid:" + this.ReplId;
+        var replOffset = "master_repl_offset:" + this.ProcessedBytes.ToString();
+        return role + "\n" + replId + "\n" + replOffset + "\n";
     }
 }
