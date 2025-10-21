@@ -11,18 +11,24 @@ class MasterReplicaBridge
     // Data set only if the node is Master;
     public string? ReplId;
 
-    public Int128? ProcessedBytes;
+    public Int128? ProducedBytes;
 
     private MasterInfo? MasterConn;
 
     public int Port;
+
+    // Only when node is replica
+    // References to the consumed Command Stream 
+    private string? MasterReplId;
+    // The last consumed offset from the Master command stream
+    private Int128 ConsumedBytes = -1;
 
     public void SetRole(MasterInfo? info)
     {
         if (info == null)
         {
             this.IsMaster = true;
-            this.ProcessedBytes = 0;
+            this.ProducedBytes = 0;
             // Extend by "repl" - so that the length is 40 per requirement
             this.ReplId = System.Guid.NewGuid().ToString() + "repl";
         }
@@ -41,9 +47,15 @@ class MasterReplicaBridge
         client.Connect(info.Ip, info.Port);
 
         var stream = client.GetStream();
-        List<List<string>> reqs = [["PING"], ["REPLCONF","listening-port", this.Port.ToString()], ["REPLCONF","capa", "psync2"]];
+        List<List<string>> reqs = [
+            ["PING"],
+            ["REPLCONF", "listening-port", this.Port.ToString()],
+            ["REPLCONF", "capa", "psync2"],
+            ["PSYNC", this.MasterReplId ?? "?", this.ConsumedBytes.ToString()]
+            ];
         // Initiate connection - first just by sending Ping and then breaking the socket.
-        foreach (var r in reqs) {
+        foreach (var r in reqs)
+        {
             byte[] sendBuffer = Encoding.UTF8.GetBytes(Types.GetStringArray(r));
             stream.Write(sendBuffer);
 
@@ -58,7 +70,7 @@ class MasterReplicaBridge
     {
         var role = "role:" + (this.IsMaster ? "master" : "slave");
         var replId = "master_replid:" + this.ReplId;
-        var replOffset = "master_repl_offset:" + this.ProcessedBytes.ToString();
+        var replOffset = "master_repl_offset:" + this.ProducedBytes.ToString();
         return role + "\n" + replId + "\n" + replOffset + "\n";
     }
 }
@@ -66,5 +78,5 @@ class MasterReplicaBridge
 class MasterInfo
 {
     required public string Ip;
-    required public int Port; 
+    required public int Port;
 }

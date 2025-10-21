@@ -38,6 +38,7 @@ namespace RedisImpl
                     // Redis info
                     "INFO" => this.Info(arguments),
                     "REPLCONF" => this.Replconf(arguments),
+                    "PSYNC" => this.Psync(arguments),
                     // Queue commands
                     "MULTI" => this.Multi(),
                     "EXEC" => this.Exec(),
@@ -68,6 +69,11 @@ namespace RedisImpl
             {
                 return Types.GetSimpleError(e.Message);
             }
+        }
+
+        public string Psync(List<string> arguments)
+        {
+            return Types.GetSimpleString("FULLRESYNC " + this.Bridge.ReplId + " " + this.Bridge.ProducedBytes.ToString());
         }
 
         public string Replconf(List<string> arguments)
