@@ -39,9 +39,18 @@ class MasterReplicaBridge
         client.Connect(info.Ip, info.Port);
 
         var stream = client.GetStream();
+        // Initiate connection - first just by sending Ping and then breaking the socket.
+        while (true)
+        {
+            byte[] sendBuffer = Encoding.UTF8.GetBytes(Types.GetStringArray(["PING"]));
+            stream.Write(sendBuffer);
 
-        byte[] sendBuffer = Encoding.UTF8.GetBytes(Types.GetStringArray(["PING"]));
-        stream.Write(sendBuffer);
+            byte[] buffer = new byte[1024];
+            stream.Socket.Receive(buffer);
+            var message = Encoding.ASCII.GetString(buffer);
+            Console.WriteLine(message);
+            break;
+        }
     }
 
     public string GetReplicaInfo()
