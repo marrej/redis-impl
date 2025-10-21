@@ -97,7 +97,12 @@ class MasterReplicaBridge
         var buf = Convert.FromBase64String(emptyBase64);
         // Using a new client send
         var res = "$0\r\n" + System.Text.Encoding.Default.GetString(buf);
-        Console.WriteLine(res);
+
+        var client = new TcpClient();
+        client.Connect("localhost", conn.Port);
+        var stream = client.GetStream();
+        byte[] sendBuffer = Encoding.UTF8.GetBytes(res);
+        stream.Write(sendBuffer);
     }
 }
 
