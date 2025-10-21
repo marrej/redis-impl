@@ -20,14 +20,10 @@ class Redis
         TcpListener server = new(IPAddress.Any, activePort);
         server.Start();
         MasterReplicaBridge bridge = new();
+        bridge.SetRole(flags.Master);
         Storage storage = new();
         Parser parser = new();
         Console.WriteLine("Accepting at " + activePort);
-
-        if (flags.Master == null)
-        {
-            bridge.SetMaster();
-        }
 
         // A communication loop listenting to socket exchanges
         var id = 0;
@@ -60,7 +56,7 @@ class Redis
                 if (conn.Length != 2) {
                     throw new Exception("Invalid conn string");
                 }
-                flags.Master = new MasterInfo { Ip = conn[0], Port = conn[1] };
+                flags.Master = new MasterInfo { Ip = conn[0], Port = Int32.Parse(conn[1]) };
             }
         }
         return flags;
@@ -108,12 +104,6 @@ class StartupFlags
     public int? Port;
 
     public MasterInfo? Master;
-}
-
-class MasterInfo
-{
-    required public string Ip;
-    required public string Port; 
 }
 
 class CliInput
