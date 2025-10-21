@@ -19,9 +19,15 @@ class Redis
         var activePort = flags.Port ?? 6379;
         TcpListener server = new(IPAddress.Any, activePort);
         server.Start();
+        MasterReplicaBridge bridge = new();
         Storage storage = new();
         Parser parser = new();
         Console.WriteLine("Accepting at " + activePort);
+
+        if (flags.Master == null)
+        {
+            bridge.SetMaster();
+        }
 
         // A communication loop listenting to socket exchanges
         var id = 0;
@@ -32,7 +38,7 @@ class Redis
                                                    // Resolves all commands sent from the socket in succession
 
             Thread conn = new Thread(ThreadLoop);
-            conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage, Flags = flags });
+            conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage, Bridge = bridge });
             id++;
         }
     }
@@ -65,7 +71,7 @@ class Redis
     {
         CliInput c = (CliInput)data;
         Console.WriteLine("Connected thread {0}", c.Id);
-        Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id, IsMaster = (c?.Flags?.Master == null) };
+        Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id, Bridge = c.Bridge };
 
         while (true)
         {
@@ -112,12 +118,12 @@ class MasterInfo
 
 class CliInput
 {
-    required public int Id { get; set; }
-    required public Socket Socket { get; set; }
+    required public int Id;
+    required public Socket Socket;
 
-    required public Parser Parser { get; set; }
-    required public Storage Storage { get; set; }
+    required public Parser Parser;
+    required public Storage Storage;
 
-    required public StartupFlags? Flags;
+    required public MasterReplicaBridge Bridge;
 }
 

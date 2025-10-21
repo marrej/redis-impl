@@ -8,11 +8,10 @@ namespace RedisImpl
     }
     class Interpreter
     {
-        required public Storage Storage;
         // Id of the current thread.
         required public int Id;
-
-        required public bool IsMaster;
+        required public Storage Storage;
+        required public MasterReplicaBridge Bridge;
 
         private List<CommandItem>? CommandQueue = null;
         public string Execute(List<string> p)
@@ -82,7 +81,7 @@ namespace RedisImpl
                     case "all":
                     case "replication":
                     default:
-                        infoKeyVals.Add("role:" + (this.IsMaster ? "master" : "slave"));
+                        infoKeyVals.Add(this.Bridge.GetReplicaInfo());
                         break;
                 }
             }
