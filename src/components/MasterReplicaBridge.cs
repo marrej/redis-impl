@@ -55,6 +55,7 @@ class MasterReplicaBridge
             ["PSYNC", this.MasterReplId ?? "?", this.ConsumedBytes.ToString()],
             ];
         // Initiate connection - first just by sending Ping and then breaking the socket.
+        var isLoadingFromRdb = false;
         foreach (var r in reqs)
         {
             byte[] sendBuffer = Encoding.UTF8.GetBytes(Types.GetStringArray(r));
@@ -65,12 +66,25 @@ class MasterReplicaBridge
             var message = Encoding.ASCII.GetString(buffer);
 
             Console.WriteLine(message);
-            if (r[0] != "PSYNC" && !message.StartsWith("+FULLRESYNC"))
+            if (r[0] == "PSYNC" && message.StartsWith("+FULLRESYNC"))
             {
-                continue;
+                isLoadingFromRdb = true;
             }
-            // TODO: parse the resync response
-            // TODO: at this point stop the connection and wait for the Master to connect and to send data ourway.
+        }
+        var i = 0;
+        while (true)
+        {
+            byte[] buffer = new byte[1024];
+            stream.Socket.Receive(buffer);
+            if (i == 1 && isLoadingFromRdb)
+            {
+                // TODO: process the RDB
+                Console.WriteLine(System.Text.Encoding.Default.GetString(buffer));
+                continue;    
+            }
+            var message = Encoding.ASCII.GetString(buffer);
+            Console.WriteLine(message);
+            i++;
         }
     }
 
