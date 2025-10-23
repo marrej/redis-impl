@@ -52,7 +52,7 @@ class MasterReplicaBridge
             ["PING"],
             ["REPLCONF", "listening-port", this.Port.ToString()],
             ["REPLCONF", "capa", "psync2"],
-            ["PSYNC", this.MasterReplId ?? "?", this.ConsumedBytes.ToString()]
+            ["PSYNC", this.MasterReplId ?? "?", this.ConsumedBytes.ToString()],
             ];
         // Initiate connection - first just by sending Ping and then breaking the socket.
         foreach (var r in reqs)
@@ -87,7 +87,7 @@ class MasterReplicaBridge
         this.Replicas[r.Port] = r;
     }
 
-    public void StartReplication(ReplicaConn? conn)
+    public (string, byte[]) GetRdb(ReplicaConn? conn)
     {
         if (conn == null)
         {
@@ -95,14 +95,7 @@ class MasterReplicaBridge
         }
         var emptyBase64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
         var buf = Convert.FromBase64String(emptyBase64);
-        // Using a new client send
-        var res = "$0\r\n" + System.Text.Encoding.Default.GetString(buf);
-
-        var client = new TcpClient();
-        client.Connect("localhost", conn.Port);
-        var stream = client.GetStream();
-        byte[] sendBuffer = Encoding.UTF8.GetBytes(res);
-        stream.Write(sendBuffer);
+        return ($"${buf.Length}\r\n", buf);
     }
 }
 

@@ -86,11 +86,13 @@ class Redis
                 // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
                 var response = Encoding.ASCII.GetBytes(i);
                 c.Socket.Send(response);
-                Console.WriteLine("Response Sent");
                 if (interpreter.StartReplication)
                 {
                     Console.WriteLine("starting replication");
-                    c.Bridge.StartReplication(interpreter.NewReplica);
+                    var (len,rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
+                    c.Socket.Send(Encoding.ASCII.GetBytes(len));
+                    c.Socket.Send(rdb);
+                    continue;
                 }
             }
             catch (Exception e)
