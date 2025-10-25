@@ -51,8 +51,10 @@ class MasterReplicaBridge
     // "Master" -> insters commands to be consumed
     public void QueueCommand(string command, List<string> arguments)
     {
-        var commandString = arguments.Aggregate(command, (agg, next) => agg + " " + next);
-        CommandQueue.AddLast(commandString);
+        // var commandString = arguments.Aggregate(command, (agg, next) => agg + " " + next);
+        var args = arguments;
+        args.Insert(0, command);
+        CommandQueue.AddLast(Types.GetStringArray(args));
         while (this.SemaphoreQueue.Count > 0)
         {
             this.SemaphoreQueue.First?.Value.Release();

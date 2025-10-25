@@ -28,9 +28,10 @@ class Redis
         bridge.SetRole(flags.Master, (string message) =>
         {
             Console.WriteLine(message);
-            // var p = parser.Parse(message);
-            // var i = replicaInterpreter.Execute(p);
-            // Console.WriteLine(i);
+            var p = parser.Parse(message);
+            if (p == null) { return; }
+            var i = replicaInterpreter.Execute(p);
+            Console.WriteLine(i);
         });
 
         Console.WriteLine("Accepting at " + activePort);
@@ -92,6 +93,8 @@ class Redis
             try
             {
                 var p = c.Parser.Parse(message);
+                if (p == null) { continue; }
+
                 var i = interpreter.Execute(p);
                 // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
                 var response = Encoding.ASCII.GetBytes(i);
