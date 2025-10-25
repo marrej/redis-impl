@@ -24,15 +24,8 @@ class Redis
 
         // Create a bridge with its own interpreter to process the replica commands
         var bridge = new MasterReplicaBridge { Port = activePort};
-        Interpreter replicaInterpreter = new() { Storage = storage, Id = -1, Bridge = bridge };
-        bridge.SetRole(flags.Master, (string message) =>
-        {
-            Console.WriteLine(message);
-            var p = parser.Parse(message);
-            if (p == null) { return; }
-            var i = replicaInterpreter.Execute(p);
-            Console.WriteLine(i);
-        });
+        Thread bridgeConn = new Thread(BridgeLoadingLoop);
+        bridgeConn.Start(new CliInput { Id = 0, Parser = parser, Storage = storage, Bridge = bridge, Flags = flags });
 
         Console.WriteLine("Accepting at " + activePort);
 
@@ -45,9 +38,23 @@ class Redis
                                                    // Resolves all commands sent from the socket in succession
 
             Thread conn = new Thread(ThreadLoop);
-            conn.Start(new CliInput { Socket = socket, Id = id, Parser = parser, Storage = storage, Bridge = bridge });
+            conn.Start(new CliInputWithSocket { Socket = socket, Id = id, Parser = parser, Storage = storage, Bridge = bridge, Flags = flags });
             id++;
         }
+    }
+
+    public static void BridgeLoadingLoop(object data)
+    {
+        CliInput c = (CliInput)data;
+        Interpreter replicaInterpreter = new() { Storage = c.Storage, Id = -1, Bridge = c.Bridge };
+        c.Bridge.SetRole(c.Flags.Master, (string message) =>
+        {
+            Console.WriteLine(message);
+            var p = c.Parser.Parse(message);
+            if (p == null) { return; }
+            var i = replicaInterpreter.Execute(p);
+            Console.WriteLine(i);
+        });
     }
 
     public static StartupFlags GetFlags(string[] args)
@@ -64,7 +71,8 @@ class Redis
             {
                 i++;
                 var conn = args[i].Split(" ");
-                if (conn.Length != 2) {
+                if (conn.Length != 2)
+                {
                     throw new Exception("Invalid conn string");
                 }
                 flags.Master = new MasterInfo { Ip = conn[0], Port = Int32.Parse(conn[1]) };
@@ -76,7 +84,7 @@ class Redis
 
     public static void ThreadLoop(object data)
     {
-        CliInput c = (CliInput)data;
+        CliInputWithSocket c = (CliInputWithSocket)data;
         Console.WriteLine("Connected thread {0}", c.Id);
         Interpreter interpreter = new() { Storage = c.Storage, Id = c.Id, Bridge = c.Bridge };
 
@@ -136,11 +144,17 @@ class StartupFlags
 class CliInput
 {
     required public int Id;
-    required public Socket Socket;
 
     required public Parser Parser;
     required public Storage Storage;
 
     required public MasterReplicaBridge Bridge;
+
+    required public StartupFlags Flags;
+}
+
+class CliInputWithSocket: CliInput
+{
+    required public Socket Socket;
 }
 
