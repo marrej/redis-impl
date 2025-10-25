@@ -6,6 +6,9 @@ using RedisImpl;
 
 class MasterReplicaBridge
 {
+    // Contains all waiting replicas
+    private LinkedList<Semaphore> SemaphoreQueue = new();
+
     // Contains all edit commands that were consumed by the master
     private LinkedList<string> CommandQueue = new();
 
@@ -27,7 +30,7 @@ class MasterReplicaBridge
     // The last consumed offset from the Master command stream
     private Int128 ConsumedBytes = -1;
 
-    public void SetRole(MasterInfo? info)
+    public void SetRole(MasterInfo? info, Action<string> processMessage)
     {
         if (info == null)
         {
@@ -40,7 +43,7 @@ class MasterReplicaBridge
         {
             this.MasterConn = info;
             // We will need to use this also on reconnect
-            this.ConnectToMaster(info);
+            this.ConnectToMaster(info, processMessage);
         }
     }
 
@@ -51,7 +54,7 @@ class MasterReplicaBridge
         CommandQueue.AddLast(commandString);
     }
 
-    private void ConnectToMaster(MasterInfo info)
+    private void ConnectToMaster(MasterInfo info, Action<string> processMessage)
     {
         Console.WriteLine("Connecting to master");
         TcpClient client = new();
@@ -94,6 +97,7 @@ class MasterReplicaBridge
             }
             var message = Encoding.ASCII.GetString(buffer);
             Console.WriteLine(message);
+            processMessage(message);
             i++;
         }
     }
@@ -124,13 +128,25 @@ class MasterReplicaBridge
 
     public void StartConsuming(Action<string> sendCommand)
     {
-        // TODO: store add the start point
+        var semaphore = new Semaphore(0, 1);
+        LinkedListNode<string>? lastCommandNode = null;
         while (true)
         {
-            // TODO: wait until my semaphore is unlocked
-            // TODO: check if there is already some data available, if not then lock and continue
-            // TODO: continue untill there is no data in the Queue and then lock my Semahore again
-            break;
+            if (this.CommandQueue.First == null || lastCommandNode?.Next == null)
+            {
+                this.SemaphoreQueue.AddLast(semaphore);
+                semaphore.WaitOne();
+                continue;
+            }
+            if (lastCommandNode.Next != null)
+            {
+                lastCommandNode = lastCommandNode.Next;
+            }
+            else if (lastCommandNode == null)
+            {
+                lastCommandNode = this.CommandQueue.First;
+            }
+            sendCommand(lastCommandNode.Value);
         }
     }
 }

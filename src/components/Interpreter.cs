@@ -78,9 +78,9 @@ namespace RedisImpl
                 };
 
                 // Store message for replica consumption
-                if (EditCommands.Contains(command.ToUpper()))
+                if (EditCommands.Contains(command.ToUpper()) && this.Bridge.IsMaster)
                 {
-                    this.Bridge.QueueCommand(command, arguments)
+                    this.Bridge.QueueCommand(command, arguments);
                 }
 
                 return ret;

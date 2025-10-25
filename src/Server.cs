@@ -21,8 +21,17 @@ class Redis
         server.Start();
         Storage storage = new();
         Parser parser = new();
+
+        // Create a bridge with its own interpreter to process the replica commands
         var bridge = new MasterReplicaBridge { Port = activePort};
-        bridge.SetRole(flags.Master);
+        Interpreter replicaInterpreter = new() { Storage = storage, Id = -1, Bridge = bridge };
+        bridge.SetRole(flags.Master, (string message) =>
+        {
+            var p = parser.Parse(message);
+            var i = replicaInterpreter.Execute(p);
+            Console.WriteLine(i);
+        });
+
         Console.WriteLine("Accepting at " + activePort);
 
         // A communication loop listenting to socket exchanges
