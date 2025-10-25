@@ -27,9 +27,10 @@ class Redis
         Interpreter replicaInterpreter = new() { Storage = storage, Id = -1, Bridge = bridge };
         bridge.SetRole(flags.Master, (string message) =>
         {
-            var p = parser.Parse(message);
-            var i = replicaInterpreter.Execute(p);
-            Console.WriteLine(i);
+            Console.WriteLine(message);
+            // var p = parser.Parse(message);
+            // var i = replicaInterpreter.Execute(p);
+            // Console.WriteLine(i);
         });
 
         Console.WriteLine("Accepting at " + activePort);
@@ -97,11 +98,18 @@ class Redis
                 c.Socket.Send(response);
                 if (interpreter.StartReplication)
                 {
+                    var sendStringResponse = (string res) =>
+                    {
+                        c.Socket.Send(Encoding.ASCII.GetBytes(res));
+                    };
+
                     Console.WriteLine("starting replication");
                     var (len, rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
-                    c.Socket.Send(Encoding.ASCII.GetBytes(len));
+                    sendStringResponse(len);
+                    Thread.Sleep(500);
                     c.Socket.Send(rdb);
-                    c.Bridge.StartConsuming((string command) => { c.Socket.Send(Encoding.ASCII.GetBytes(command)); });
+                    Thread.Sleep(500);
+                    c.Bridge.StartConsuming(sendStringResponse);
                     continue;
                 }
             }

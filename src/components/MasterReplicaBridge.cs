@@ -2,6 +2,7 @@
 // all operations related to the master-replica communication
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using RedisImpl;
 
 class MasterReplicaBridge
@@ -50,13 +51,17 @@ class MasterReplicaBridge
     // "Master" -> insters commands to be consumed
     public void QueueCommand(string command, List<string> arguments)
     {
-        var commandString = command + arguments.Aggregate(command, (agg, next) => agg + " " + next);
+        var commandString = arguments.Aggregate(command, (agg, next) => agg + " " + next);
         CommandQueue.AddLast(commandString);
+        while (this.SemaphoreQueue.Count > 0)
+        {
+            this.SemaphoreQueue.First?.Value.Release();
+            this.SemaphoreQueue.RemoveFirst();
+        }
     }
 
     private void ConnectToMaster(MasterInfo info, Action<string> processMessage)
     {
-        Console.WriteLine("Connecting to master");
         TcpClient client = new();
         client.Connect(info.Ip, info.Port);
 
@@ -78,7 +83,6 @@ class MasterReplicaBridge
             stream.Socket.Receive(buffer);
             var message = Encoding.ASCII.GetString(buffer);
 
-            Console.WriteLine(message);
             if (r[0] == "PSYNC" && message.StartsWith("+FULLRESYNC"))
             {
                 isLoadingFromRdb = true;
@@ -91,12 +95,14 @@ class MasterReplicaBridge
             stream.Socket.Receive(buffer);
             if (i == 1 && isLoadingFromRdb)
             {
+                Console.WriteLine("RDB");
                 // TODO: process the RDB
                 Console.WriteLine(System.Text.Encoding.Default.GetString(buffer));
+                i++;
                 continue;
             }
+            Console.WriteLine("Message processing");
             var message = Encoding.ASCII.GetString(buffer);
-            Console.WriteLine(message);
             processMessage(message);
             i++;
         }
@@ -132,13 +138,13 @@ class MasterReplicaBridge
         LinkedListNode<string>? lastCommandNode = null;
         while (true)
         {
-            if (this.CommandQueue.First == null || lastCommandNode?.Next == null)
+            if (this.CommandQueue.First == null || (lastCommandNode != null &&lastCommandNode?.Next == null))
             {
                 this.SemaphoreQueue.AddLast(semaphore);
                 semaphore.WaitOne();
                 continue;
             }
-            if (lastCommandNode.Next != null)
+            if (lastCommandNode?.Next != null)
             {
                 lastCommandNode = lastCommandNode.Next;
             }
