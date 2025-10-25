@@ -6,6 +6,9 @@ using RedisImpl;
 
 class MasterReplicaBridge
 {
+    // Contains all edit commands that were consumed by the master
+    private LinkedList<string> CommandQueue = new();
+
     private Dictionary<Int128, ReplicaConn> Replicas = new();
     public bool IsMaster = false;
 
@@ -39,6 +42,13 @@ class MasterReplicaBridge
             // We will need to use this also on reconnect
             this.ConnectToMaster(info);
         }
+    }
+
+    // "Master" -> insters commands to be consumed
+    public void QueueCommand(string command, List<string> arguments)
+    {
+        var commandString = command + arguments.Aggregate(command, (agg, next) => agg + " " + next);
+        CommandQueue.AddLast(commandString);
     }
 
     private void ConnectToMaster(MasterInfo info)
@@ -80,7 +90,7 @@ class MasterReplicaBridge
             {
                 // TODO: process the RDB
                 Console.WriteLine(System.Text.Encoding.Default.GetString(buffer));
-                continue;    
+                continue;
             }
             var message = Encoding.ASCII.GetString(buffer);
             Console.WriteLine(message);
@@ -110,6 +120,18 @@ class MasterReplicaBridge
         var emptyBase64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==";
         var buf = Convert.FromBase64String(emptyBase64);
         return ($"${buf.Length}\r\n", buf);
+    }
+
+    public void StartConsuming(Action<string> sendCommand)
+    {
+        // TODO: store add the start point
+        while (true)
+        {
+            // TODO: wait until my semaphore is unlocked
+            // TODO: check if there is already some data available, if not then lock and continue
+            // TODO: continue untill there is no data in the Queue and then lock my Semahore again
+            break;
+        }
     }
 }
 

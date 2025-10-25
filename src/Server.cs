@@ -89,9 +89,10 @@ class Redis
                 if (interpreter.StartReplication)
                 {
                     Console.WriteLine("starting replication");
-                    var (len,rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
+                    var (len, rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
                     c.Socket.Send(Encoding.ASCII.GetBytes(len));
                     c.Socket.Send(rdb);
+                    c.Bridge.StartConsuming((string command) => { c.Socket.Send(Encoding.ASCII.GetBytes(command)); });
                     continue;
                 }
             }

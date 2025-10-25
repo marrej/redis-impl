@@ -38,11 +38,14 @@ namespace RedisImpl
             return this.ExecCmd(command, arguments);
         }
 
+        // Blocking commands should be changed to non blocking after being consumed
+        static private HashSet<string> EditCommands = ["SET", "INCR", "RPUSH", "LPUSH", "RPOP", "LPOP", "BLPOP", "XADD"];
+
         private string ExecCmd(string command, List<string> arguments)
         {
             try
             {
-                return command.ToUpper() switch
+                var ret = command.ToUpper() switch
                 {
                     // Redis info
                     "INFO" => this.Info(arguments),
@@ -73,6 +76,14 @@ namespace RedisImpl
                     "XREAD" => this.XRead(arguments),
                     _ => Types.GetSimpleString("ERROR no command specified"),
                 };
+
+                // Store message for replica consumption
+                if (EditCommands.Contains(command.ToUpper()))
+                {
+                    this.Bridge.QueueCommand(command, arguments)
+                }
+
+                return ret;
             }
             catch (Exception e)
             {
@@ -257,7 +268,7 @@ namespace RedisImpl
             }
             catch (Exception)
             {
-                return Types.GetSimpleError("ERROR setting val");
+                throw new Exception("ERROR setting val");
             }
         }
 
@@ -421,14 +432,7 @@ namespace RedisImpl
                 kvs.Add(new KeyValPair { Key = arguments[i], Val = arguments[i + 1] });
             }
             var item = new StreamItem { Id = id, KVs = kvs, Time = 0, SerieId = 0 };
-            try
-            {
-                return Types.GetBulkString([this.Storage.Xadd(streamName, item)]);
-            }
-            catch (Exception e)
-            {
-                return Types.GetSimpleError(e.Message);
-            }
+            return Types.GetBulkString([this.Storage.Xadd(streamName, item)]);
         }
 
         // https://redis.io/docs/latest/commands/xrange/
