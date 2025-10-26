@@ -114,7 +114,7 @@ namespace RedisImpl
             if (arguments.Count == 2 && arguments[0].ToUpper() == "GETACK")
             {
                 // TODO: attach the current processed byte offset
-                return Types.GetStringArray(["REPLCONF", "ACK", "0"]);
+                return Types.GetStringArray(["REPLCONF", "ACK", this.Bridge.ConsumedBytes.ToString()]);
             }
             if (arguments.Count > 1 && arguments[0] == "listening-port")
             {

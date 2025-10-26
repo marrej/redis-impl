@@ -57,6 +57,13 @@ class Redis
             {
                 var i = replicaInterpreter.Execute(comm);
                 ret.Add(i);
+
+                // Count the current consumed length from master
+                if (c.Bridge.ConsumedBytes == -1)
+                {
+                    c.Bridge.ConsumedBytes = 0;
+                }
+                c.Bridge.ConsumedBytes += Encoding.ASCII.GetBytes(Types.GetStringArray(comm)).Length;
             }
             return ret;
         });

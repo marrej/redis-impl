@@ -29,7 +29,7 @@ class MasterReplicaBridge
     // References to the consumed Command Stream 
     private string? MasterReplId;
     // The last consumed offset from the Master command stream
-    private Int128 ConsumedBytes = -1;
+    public Int128 ConsumedBytes = -1;
 
     public void SetRole(MasterInfo? info, Func<string, List<string>?> processMessage)
     {
