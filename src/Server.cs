@@ -51,11 +51,14 @@ class Redis
         {
             Console.WriteLine(message);
             var p = c.Parser.ParseCommandLists(message);
-            if (p == null) { return; }
+            if (p == null) { return null; }
+            List<string> ret = [];
             foreach (var comm in p)
             {
                 var i = replicaInterpreter.Execute(comm);
+                ret.Add(i);
             }
+            return ret;
         });
     }
 

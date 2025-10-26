@@ -31,7 +31,7 @@ class MasterReplicaBridge
     // The last consumed offset from the Master command stream
     private Int128 ConsumedBytes = -1;
 
-    public void SetRole(MasterInfo? info, Action<string> processMessage)
+    public void SetRole(MasterInfo? info, Func<string, List<string>?> processMessage)
     {
         if (info == null)
         {
@@ -62,7 +62,7 @@ class MasterReplicaBridge
         }
     }
 
-    private void ConnectToMaster(MasterInfo info, Action<string> processMessage)
+    private void ConnectToMaster(MasterInfo info, Func<string, List<string>?> processMessage)
     {
         TcpClient client = new();
         client.Connect(info.Ip, info.Port);
@@ -103,7 +103,6 @@ class MasterReplicaBridge
             {
                 Console.WriteLine("RDB");
                 // TODO: process the RDB
-                Console.WriteLine();
                 // Start preparsing
                 processMessage(System.Text.Encoding.Default.GetString(buffer));
                 i++;
@@ -116,7 +115,15 @@ class MasterReplicaBridge
                 Console.WriteLine("Empty message");
                 return;
             }
-            processMessage(message);
+            // Respond back to replconf acks
+            var responses = processMessage(message) ?? [];
+            foreach (var r in responses)
+            {
+                if (r.Contains("REPLCONF") && r.Contains("ACK"))
+                {
+                    stream.Socket.Send(Encoding.ASCII.GetBytes(r));
+                }
+            }
             i++;
         }
     }

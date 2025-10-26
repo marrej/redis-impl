@@ -1,4 +1,5 @@
 using System.Buffers.Text;
+using System.Text.Json;
 
 namespace RedisImpl
 {
@@ -110,9 +111,14 @@ namespace RedisImpl
 
         public string Replconf(List<string> arguments)
         {
+            if (arguments.Count == 2 && arguments[0].ToUpper() == "GETACK")
+            {
+                // TODO: attach the current processed byte offset
+                return Types.GetStringArray(["REPLCONF", "ACK", "0"]);
+            }
             if (arguments.Count > 1 && arguments[0] == "listening-port")
             {
-                this.NewReplica = new ReplicaConn { Port = Int32.Parse(arguments[1])};
+                this.NewReplica = new ReplicaConn { Port = Int32.Parse(arguments[1]) };
             }
             // Currently automatically responds happily everytime;
             // TODO: But should also set the port of the follower
