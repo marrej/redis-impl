@@ -83,6 +83,10 @@ class MasterReplicaBridge
 
             byte[] buffer = new byte[1024];
             stream.Socket.Receive(buffer);
+            if (!stream.Socket.Connected)
+            {
+                return;
+            }
             var message = Encoding.ASCII.GetString(buffer);
 
             if (r[0] == "PSYNC" && message.StartsWith("+FULLRESYNC"))
@@ -99,12 +103,19 @@ class MasterReplicaBridge
             {
                 Console.WriteLine("RDB");
                 // TODO: process the RDB
-                Console.WriteLine(System.Text.Encoding.Default.GetString(buffer));
+                Console.WriteLine();
+                // Start preparsing
+                processMessage(System.Text.Encoding.Default.GetString(buffer));
                 i++;
                 continue;
             }
             Console.WriteLine("Message processing");
             var message = Encoding.ASCII.GetString(buffer);
+            if (message.Replace("\u0000", "").Length == 0)
+            {
+                Console.WriteLine("Empty message");
+                return;
+            }
             processMessage(message);
             i++;
         }

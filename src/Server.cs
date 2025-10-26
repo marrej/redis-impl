@@ -23,7 +23,7 @@ class Redis
         Parser parser = new();
 
         // Create a bridge with its own interpreter to process the replica commands
-        var bridge = new MasterReplicaBridge { Port = activePort};
+        var bridge = new MasterReplicaBridge { Port = activePort };
         Thread bridgeConn = new Thread(BridgeLoadingLoop);
         bridgeConn.Start(new CliInput { Id = 0, Parser = parser, Storage = storage, Bridge = bridge, Flags = flags });
 
@@ -50,10 +50,12 @@ class Redis
         c.Bridge.SetRole(c.Flags.Master, (string message) =>
         {
             Console.WriteLine(message);
-            var p = c.Parser.Parse(message);
+            var p = c.Parser.ParseCommandLists(message);
             if (p == null) { return; }
-            var i = replicaInterpreter.Execute(p);
-            Console.WriteLine(i);
+            foreach (var comm in p)
+            {
+                var i = replicaInterpreter.Execute(comm);
+            }
         });
     }
 
@@ -100,28 +102,29 @@ class Redis
             var message = Encoding.ASCII.GetString(buffer);
             try
             {
-                var p = c.Parser.Parse(message);
+                // Parses joined messages (e.g. multiple SET commands together)
+                var p = c.Parser.ParseCommandLists(message);
                 if (p == null) { continue; }
-
-                var i = interpreter.Execute(p);
-                // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
-                var response = Encoding.ASCII.GetBytes(i);
-                c.Socket.Send(response);
-                if (interpreter.StartReplication)
+                foreach (var comm in p)
                 {
-                    var sendStringResponse = (string res) =>
+                    var i = interpreter.Execute(comm);
+                    // Responds using SimpleString which is. "+`${ret}`\r\n" at all times
+                    var response = Encoding.ASCII.GetBytes(i);
+                    c.Socket.Send(response);
+                    if (interpreter.StartReplication)
                     {
-                        c.Socket.Send(Encoding.ASCII.GetBytes(res));
-                    };
+                        var sendStringResponse = (string res) =>
+                        {
+                            c.Socket.Send(Encoding.ASCII.GetBytes(res));
+                        };
 
-                    Console.WriteLine("starting replication");
-                    var (len, rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
-                    sendStringResponse(len);
-                    Thread.Sleep(500);
-                    c.Socket.Send(rdb);
-                    Thread.Sleep(500);
-                    c.Bridge.StartConsuming(sendStringResponse);
-                    continue;
+                        Console.WriteLine("starting replication");
+                        var (len, rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
+                        sendStringResponse(len);
+                        c.Socket.Send(rdb);
+                        c.Bridge.StartConsuming(sendStringResponse);
+                        continue;
+                    }
                 }
             }
             catch (Exception e)
@@ -153,7 +156,7 @@ class CliInput
     required public StartupFlags Flags;
 }
 
-class CliInputWithSocket: CliInput
+class CliInputWithSocket : CliInput
 {
     required public Socket Socket;
 }
