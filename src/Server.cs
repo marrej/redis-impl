@@ -49,7 +49,6 @@ class Redis
         Interpreter replicaInterpreter = new() { Storage = c.Storage, Id = -1, Bridge = c.Bridge };
         c.Bridge.SetRole(c.Flags.Master, (string message) =>
         {
-            Console.WriteLine(message);
             var p = c.Parser.ParseCommandLists(message);
             if (p == null) { return null; }
             List<string> ret = [];
@@ -123,15 +122,24 @@ class Redis
                     c.Socket.Send(response);
                     if (interpreter.StartReplication)
                     {
-                        var sendStringResponse = (string res) =>
+                        var sendStringResponse = (string req) =>
                         {
-                            c.Socket.Send(Encoding.ASCII.GetBytes(res));
+                            c.Socket.Send(Encoding.ASCII.GetBytes(req));
+                            var buff = new byte[1024];
+                            var ret = c.Socket.Receive(buff);
+                            return Encoding.ASCII.GetString(buff);
                         };
 
                         Console.WriteLine("starting replication");
                         var (len, rdb) = c.Bridge.GetRdb(interpreter.NewReplica);
-                        sendStringResponse(len);
+                        c.Socket.Send(Encoding.ASCII.GetBytes(len));
+                        var buff1 = new byte[1024];
+                        c.Socket.Receive(buff1);
+                        Console.WriteLine(Encoding.ASCII.GetString(buff1));
                         c.Socket.Send(rdb);
+                        var buff2 = new byte[1024];
+                        c.Socket.Receive(buff2);
+                        Console.WriteLine(Encoding.ASCII.GetString(buff2));
                         c.Bridge.StartConsuming(sendStringResponse);
                         continue;
                     }

@@ -98,7 +98,15 @@ class MasterReplicaBridge
         while (true)
         {
             byte[] buffer = new byte[1024];
+            Console.WriteLine("Waiting for next commands");
             stream.Socket.Receive(buffer);
+            if (i == 0 && isLoadingFromRdb)
+            {
+                Console.WriteLine("RDB len");
+                stream.Socket.Send(Encoding.ASCII.GetBytes("RDB len received"));
+                i++;
+                continue;
+            }
             if (i == 1 && isLoadingFromRdb)
             {
                 Console.WriteLine("RDB");
@@ -106,9 +114,10 @@ class MasterReplicaBridge
                 // Start preparsing
                 processMessage(System.Text.Encoding.Default.GetString(buffer));
                 i++;
+                stream.Socket.Send(Encoding.ASCII.GetBytes("RDB received"));
                 continue;
             }
-            Console.WriteLine("Message processing");
+            Console.WriteLine("Message processing--");
             var message = Encoding.ASCII.GetString(buffer);
             if (message.Replace("\u0000", "").Length == 0)
             {
@@ -117,12 +126,13 @@ class MasterReplicaBridge
             }
             // Respond back to replconf acks
             var responses = processMessage(message) ?? [];
+            if (responses.Count == 0)
+            { 
+                stream.Socket.Send(Encoding.ASCII.GetBytes("EMPTY RESPONSE"));  
+            }
             foreach (var r in responses)
             {
-                if (r.Contains("REPLCONF") && r.Contains("ACK"))
-                {
-                    stream.Socket.Send(Encoding.ASCII.GetBytes(r));
-                }
+                stream.Socket.Send(Encoding.ASCII.GetBytes(r));
             }
             i++;
         }
@@ -156,7 +166,7 @@ class MasterReplicaBridge
     * Consumes the write commands if they are ready on the Command Queue.
     * Whenever replica is waiting for further commands to consume, it adds itself to the semaphoreQueue.
     */
-    public void StartConsuming(Action<string> sendCommand)
+    public void StartConsuming(Func<string, string> sendCommand)
     {
         var semaphore = new Semaphore(0, 1);
         LinkedListNode<string>? lastCommandNode = null;
@@ -176,7 +186,9 @@ class MasterReplicaBridge
             {
                 lastCommandNode = this.CommandQueue.First;
             }
-            sendCommand(lastCommandNode.Value);
+            var res = sendCommand(lastCommandNode.Value);
+            Console.WriteLine(res);
+            // TODO: if is getack then we signal
         }
     }
 
