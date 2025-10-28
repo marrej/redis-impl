@@ -21,7 +21,7 @@ A shared `Storage` is used for all the sockets. The storage is a single class wh
 
 ## Learnings
 
-- Semaphores work generally better than Mutex if you want to guard a resource, since they can be released multiple times without crashing and shouldn't cause deadlocks if combined with Timers.
+- Semaphores work generally better than Mutex if you want to guard a resource (which will arrive in some time), since they can be released multiple times without crashing and shouldn't cause deadlocks if combined with Timers. Since they work as arbitrary counters which can be incremented even before the "wait" starts.
 - In a system like this, it would be beneficial to have a class executor per command, with which some complexity over the Storage usage would dissapear (assuming that properties from storage would be public)
 - TCP communication is best leveraged with REQ-RES model. Although that consumes more bandwidth, its less error prone. Adding the selective REQ/RES and bundling messages together can cause a lot of pain to understand analyse and also trigger unwanted receivals. (e.g. message duplication)
 
