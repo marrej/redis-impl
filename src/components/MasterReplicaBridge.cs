@@ -152,13 +152,17 @@ class MasterReplicaBridge
         return ($"${buf.Length}\r\n", buf);
     }
 
+    /*
+    * Consumes the write commands if they are ready on the Command Queue.
+    * Whenever replica is waiting for further commands to consume, it adds itself to the semaphoreQueue.
+    */
     public void StartConsuming(Action<string> sendCommand)
     {
         var semaphore = new Semaphore(0, 1);
         LinkedListNode<string>? lastCommandNode = null;
         while (true)
         {
-            if (this.CommandQueue.First == null || (lastCommandNode != null &&lastCommandNode?.Next == null))
+            if (this.CommandQueue.First == null || (lastCommandNode != null && lastCommandNode?.Next == null))
             {
                 this.SemaphoreQueue.AddLast(semaphore);
                 semaphore.WaitOne();
@@ -174,6 +178,11 @@ class MasterReplicaBridge
             }
             sendCommand(lastCommandNode.Value);
         }
+    }
+
+    public int GetWaitingReplicas()
+    {
+        return this.SemaphoreQueue.Count;
     }
 }
 

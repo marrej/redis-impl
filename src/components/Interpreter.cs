@@ -106,8 +106,14 @@ namespace RedisImpl
             {
                 return Types.GetInteger(0);
             }
-            // TODO: add return logic
-            return Types.GetInteger(0);
+            var waiting = this.Bridge.GetWaitingReplicas();
+            if (waiting >= replicas)
+            {
+                return Types.GetInteger(waiting);
+            }
+            // TODO: add timeout consumation
+            // After timeout passes, return the current waiting replicas.
+            return Types.GetInteger(this.Bridge.GetWaitingReplicas());
         }
 
         public string Psync(List<string> arguments)
