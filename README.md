@@ -1,39 +1,30 @@
-[![progress-banner](https://backend.codecrafters.io/progress/redis/09246eea-27e0-41e8-a60b-81573599f0c4)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+# Redis Impl
 
-This is a starting point for C# solutions to the
-["Build Your Own Redis" Challenge](https://codecrafters.io/challenges/redis).
+This project has served me as learning experience for C#.
+With that said, I tackled few interesting challenges, such as multithreading for active storage, creating layers over existing thread contention mechanisms and more.
 
-In this challenge, you'll build a toy Redis clone that's capable of handling
-basic commands like `PING`, `SET` and `GET`. Along the way we'll learn about
-event loops, the Redis protocol and more.
+Note that it doesn't implement any security features so its not possible to use in prod env, onyl as toy project locally
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+## Usage
 
-# Passing the first stage
+Start via `dotnet watch` as master or e.g. `dotnet watch --port 1234 --replicaof "localhost 6379"` as replica connected to master.
 
-The entry point for your Redis implementation is in `src/Server.cs`. Study and
-uncomment the relevant code, and push your changes to pass the first stage:
+Easiest way how to interact with the app is `redis-cli` which automatically opens a TCP socket to communicate with the service. To communicate e.g. with replicas choose a different port `redis-cli -p 1234`.
 
-```sh
-git commit -am "pass 1st stage" # any msg
-git push origin master
-```
+## General workflow
 
-That's all!
+`Server.CS` handles all incomming traffic. After a connection is made, it uses `Parser` to parse the input and `Interpreter` to launch the command.
 
-# Stage 2 & beyond
+A shared `Storage` is used for all the sockets. The storage is a single class which should be split for Streams,Arrays,KeyVals but currently is a single storage.
 
-Note: This section is for stages 2 and beyond.
+`MasterReplicaBridge` is used to coordinate the replication handshake and consumation of queued commands from Master.
 
-1. Ensure you have `dotnet (8.0)` installed locally
-1. Run `./your_program.sh` to run your Redis server, which is implemented in
-   `src/Server.cs`.
-1. Commit your changes and run `git push origin master` to submit your solution
-   to CodeCrafters. Test output will be streamed to your terminal.
+## Learnings
 
-# Running Code Crafters
+- Semaphores work generally better than Mutex if you want to guard a resource, since they can be released multiple times without crashing and shouldn't cause deadlocks if combined with Timers.
+- In a system like this, it would be beneficial to have a class executor per command, with which some complexity over the Storage usage would dissapear (assuming that properties from storage would be public)
+- TCP communication is best leveraged with REQ-RES model. Although that consumes more bandwidth, its less error prone. Adding the selective REQ/RES and bundling messages together can cause a lot of pain to understand analyse and also trigger unwanted receivals. (e.g. message duplication)
 
-`codecrafters test` - will execute the tests which tests for the current stage
-
-`codecrafters submit` - this is executed once we are done
+## Appendix
+This was largely implemented via the course - https://app.codecrafters.io/courses/redis/introduction , but worth to note that I was adding a bit more on top since having unfinished features frustrated me.
+The course is not 100% finished due to raciness in the evaluator when multiple replicas were connected.
