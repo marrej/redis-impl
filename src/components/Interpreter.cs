@@ -50,8 +50,10 @@ namespace RedisImpl
                 {
                     // Redis info
                     "INFO" => this.Info(arguments),
+                    // Replica commands
                     "REPLCONF" => this.Replconf(arguments),
                     "PSYNC" => this.Psync(arguments),
+                    "WAIT" => this.Wait(arguments),
                     // Queue commands
                     "MULTI" => this.Multi(),
                     "EXEC" => this.Exec(),
@@ -91,6 +93,22 @@ namespace RedisImpl
                 return Types.GetSimpleError(e.Message);
             }
         }
+        
+        public string Wait(List<string> arguments)
+        {
+            if (arguments.Count < 2)
+            {
+                return Types.GetSimpleError("ERROR invalid parameter count");
+            }
+            var replicas = Int32.Parse(arguments[0]);
+            var timeout = Int32.Parse(arguments[1]);
+            if (replicas == 0)
+            {
+                return Types.GetInteger(0);
+            }
+            // TODO: add return logic
+            return Types.GetInteger(0);
+        }
 
         public string Psync(List<string> arguments)
         {
@@ -99,7 +117,7 @@ namespace RedisImpl
                 return Types.GetSimpleError("ERROR invalid parameter count");
             }
             if (this.NewReplica == null)
-            { 
+            {
                 return Types.GetSimpleError("ERR replica not initialized");
             }
             this.NewReplica.MasterReplId = arguments[0];
