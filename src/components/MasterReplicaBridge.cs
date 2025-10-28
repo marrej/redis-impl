@@ -11,7 +11,7 @@ class MasterReplicaBridge
     private LinkedList<Semaphore> SemaphoreQueue = new();
 
     // Contains all edit commands that were consumed by the master
-    private LinkedList<string> CommandQueue = new();
+    private LinkedList<QueuedCommand> CommandQueue = new();
 
     private Dictionary<Int128, ReplicaConn> Replicas = new();
     public bool IsMaster = false;
@@ -51,10 +51,14 @@ class MasterReplicaBridge
     // "Master" -> insters commands to be consumed
     public void QueueCommand(string command, List<string> arguments)
     {
+        this.QueueCommand(command, arguments);
+    }
+    public void QueueCommand(string command, List<string> arguments, SemaphoredCounter? semaphore)
+    {
         // var commandString = arguments.Aggregate(command, (agg, next) => agg + " " + next);
         var args = arguments;
         args.Insert(0, command);
-        CommandQueue.AddLast(Types.GetStringArray(args));
+        CommandQueue.AddLast(new QueuedCommand { Cmd = Types.GetStringArray(args), Semaphore = semaphore });
         while (this.SemaphoreQueue.Count > 0)
         {
             this.SemaphoreQueue.First?.Value.Release();
@@ -169,7 +173,7 @@ class MasterReplicaBridge
     public void StartConsuming(Func<string, string> sendCommand)
     {
         var semaphore = new Semaphore(0, 1);
-        LinkedListNode<string>? lastCommandNode = null;
+        LinkedListNode<QueuedCommand>? lastCommandNode = null;
         while (true)
         {
             if (this.CommandQueue.First == null || (lastCommandNode != null && lastCommandNode?.Next == null))
@@ -186,7 +190,12 @@ class MasterReplicaBridge
             {
                 lastCommandNode = this.CommandQueue.First;
             }
-            var res = sendCommand(lastCommandNode.Value);
+            var cmd = lastCommandNode.Value;
+            var res = sendCommand(cmd.ToString());
+            if (cmd.Semaphore != null)
+            {
+                cmd.Semaphore.Release();
+            }
             Console.WriteLine(res);
             // TODO: if is getack then we signal
         }
@@ -211,4 +220,47 @@ class ReplicaConn
     public string? MasterReplId;
     // The last consumed offset from the Master command stream
     public Int128 ConsumedBytes = -1;
+}
+
+class QueuedCommand
+{
+    required public string Cmd;
+    public SemaphoredCounter? Semaphore;
+
+    override public string ToString()
+    {
+        return this.Cmd;
+    }
+}
+
+class SemaphoredCounter
+{
+    required public int count;
+    required public int releaseAt;
+
+    private readonly Semaphore Semaphore = new(0, 1);
+
+    public void Release()
+    {
+        count++;
+        if (count == releaseAt)
+        {
+            this.Semaphore.Release();
+        }
+    }
+
+    public int WaitResolved(int timeout)
+    {
+        Timer? timer = null;
+        if (timeout >= 0)
+        {
+            timer = new Timer((object threadIdArg) =>
+            {
+                this.Semaphore.Release();
+                timer?.Dispose();
+            }, null, timeout, 2000);
+        }
+        this.Semaphore.WaitOne();
+        return this.count;
+    }
 }

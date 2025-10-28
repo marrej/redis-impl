@@ -111,15 +111,16 @@ namespace RedisImpl
             {
                 return Types.GetInteger(waiting);
             }
-            this.Bridge.QueueCommand("REPLCONF", ["GETACK", "*"]);
-
+            var semaphore = new SemaphoredCounter { count = 0, releaseAt = replicas };
+            this.Bridge.QueueCommand("REPLCONF", ["GETACK", "*"], semaphore);
+            var acked = semaphore.WaitResolved(timeout);
             // Send the Replconf getack * (attach it to the CommandQueue)
             // add a semaphore which will get signalled by every replica that processes it
             // Attach the semaphore to the command
 
             // TODO: add timeout consumation
             // After timeout passes, return the current waiting replicas.
-            return Types.GetInteger(this.Bridge.GetWaitingReplicas());
+            return Types.GetInteger(acked);
         }
 
         public string Psync(List<string> arguments)
